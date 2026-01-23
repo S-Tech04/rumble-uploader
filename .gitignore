@@ -1,1 +1,7 @@
 node_modules/
+dist/
+.env
+downloaded/*
+!downloaded/.gitkeep
+temp/*
+!temp/.gitkeep

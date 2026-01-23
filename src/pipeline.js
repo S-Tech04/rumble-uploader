@@ -3,20 +3,30 @@
  * Manages the extraction, download, and upload workflow
  */
 
-const fs = require('fs');
-const path = require('path');
-const { v4: uuidv4 } = require('uuid');
-const AnimeExtractor = require('./extractors/9anime');
-const HLSDownloader = require('./downloader');
-const RumbleUploader = require('./uploader');
+require("dotenv").config();
+const fs = require("fs");
+const path = require("path");
+const axios = require("axios");
+const { v4: uuidv4 } = require("uuid");
+const AnimeExtractor = require("./extractors/9anime");
+const HLSDownloader = require("./downloader");
+const RumbleUploader = require("./uploader");
 
-const TEMP_DIR = path.join(__dirname, '..', 'temp');
-const DOWNLOADED_DIR = path.join(__dirname, '..', 'downloaded');
+const TEMP_DIR = path.join(__dirname, "..", "temp");
+const DOWNLOADED_DIR = path.join(__dirname, "..", "downloaded");
+const API_BASE = process.env.API_BASE || "https://anime-api-itzzzme.vercel.app/api";
 
 // Job storage (in-memory for simplicity)
 const jobs = new Map();
 
 class Pipeline {
+    /**
+     * Get all pipelines
+     */
+    static getAllPipelines() {
+        return Array.from(jobs.values());
+    }
+
     /**
      * Start a new pipeline job
      */
@@ -27,12 +37,14 @@ class Pipeline {
         const job = {
             id: jobId,
             url: videoUrl,
-            status: 'running',
-            step: 'extract',
-            message: 'Initializing...',
+            status: "running",
+            step: "extract",
+            message: "Initializing...",
             progress: {},
             completed: false,
-            createdAt: new Date()
+            createdAt: new Date(),
+            linkType: options.linkType || "auto",
+            videoType: options.videoType || "sub"
         };
 
         jobs.set(jobId, job);
@@ -40,7 +52,7 @@ class Pipeline {
         // Run pipeline in background
         this.runPipeline(jobId, videoUrl, cookies, options).catch(err => {
             this.updateJob(jobId, {
-                status: 'error',
+                status: "error",
                 error: err.message,
                 completed: true
             });
@@ -55,7 +67,7 @@ class Pipeline {
     static getStatus(jobId) {
         const job = jobs.get(jobId);
         if (!job) {
-            return { error: 'Job not found' };
+            return { error: "Job not found" };
         }
         return job;
     }
@@ -66,11 +78,51 @@ class Pipeline {
     static cancel(jobId) {
         const job = jobs.get(jobId);
         if (job) {
-            job.status = 'cancelled';
+            job.status = "cancelled";
             job.completed = true;
-            job.error = 'Cancelled by user';
+            job.error = "Cancelled by user";
         }
         return { success: true };
+    }
+
+    /**
+     * Pause a job
+     */
+    static pause(jobId) {
+        const job = jobs.get(jobId);
+        if (job && job.status === "running") {
+            job.paused = true;
+            job.status = "paused";
+            job.message = "Paused by user";
+        }
+        return { success: true };
+    }
+
+    /**
+     * Resume a job
+     */
+    static resume(jobId) {
+        const job = jobs.get(jobId);
+        if (job && job.status === "paused") {
+            job.paused = false;
+            job.status = "running";
+            job.message = "Resuming...";
+        }
+        return { success: true };
+    }
+
+    /**
+     * Clear failed jobs
+     */
+    static clearFailedJobs() {
+        let clearedCount = 0;
+        for (const [jobId, job] of jobs.entries()) {
+            if (job.status === "error" || job.status === "cancelled") {
+                jobs.delete(jobId);
+                clearedCount++;
+            }
+        }
+        return { success: true, clearedCount };
     }
 
     /**
@@ -84,6 +136,55 @@ class Pipeline {
     }
 
     /**
+     * Fetch episodes list and find episode number
+     */
+    static async fetchEpisodeNumber(animeId, episodeIdFromUrl) {
+        try {
+            const episodesUrl = `${API_BASE}/episodes/${animeId}`;
+            console.log(`[Pipeline] Fetching episodes from: ${episodesUrl}`);
+            
+            const response = await axios.get(episodesUrl, { timeout: 10000 });
+            
+            if (response.data.success && response.data.results.episodes) {
+                const episodes = response.data.results.episodes;
+                const episode = episodes.find(ep => ep.id === episodeIdFromUrl);
+                
+                if (episode) {
+                    console.log(`[Pipeline] Found episode: ${episode.episode_no} - ${episode.title}`);
+                    return {
+                        episodeNumber: episode.episode_no,
+                        episodeTitle: episode.title
+                    };
+                }
+            }
+            return null;
+        } catch (error) {
+            console.error(`[Pipeline] Error fetching episodes: ${error.message}`);
+            return null;
+        }
+    }
+
+    /**
+     * Download subtitle file
+     */
+    static async downloadSubtitle(url, outputPath) {
+        try {
+            console.log(`[Pipeline] Downloading subtitle from: ${url}`);
+            const response = await axios.get(url, {
+                responseType: "text",
+                timeout: 30000
+            });
+            
+            fs.writeFileSync(outputPath, response.data, "utf8");
+            console.log(`[Pipeline] Subtitle saved to: ${outputPath}`);
+            return { success: true, path: outputPath };
+        } catch (error) {
+            console.error(`[Pipeline] Subtitle download error: ${error.message}`);
+            return { success: false, error: error.message };
+        }
+    }
+
+    /**
      * Run the pipeline
      */
     static async runPipeline(jobId, videoUrl, cookies, options) {
@@ -92,6 +193,8 @@ class Pipeline {
 
         let outputFile = null;
         let episodeId = null;
+        let subtitlePath = null;
+        let subtitleUrl = null;
 
         try {
             // Ensure directories exist
@@ -102,126 +205,255 @@ class Pipeline {
                 fs.mkdirSync(DOWNLOADED_DIR, { recursive: true });
             }
 
-            // Step 1: Extract
-            this.updateJob(jobId, {
-                step: 'extract',
-                status: 'running',
-                message: 'Extracting video info...'
-            });
+            const linkType = options.linkType || "auto";
+            const videoType = options.videoType || "sub";
+            let m3u8Url = null;
+            let title = options.title;
+            let extractResult = null;
 
-            const extractor = new AnimeExtractor();
-            const extractResult = await extractor.extract(videoUrl);
-
-            if (!extractResult.success) {
-                throw new Error(`Extraction failed: ${extractResult.error}`);
+            // Check if paused
+            const job = jobs.get(jobId);
+            if (job && job.paused) {
+                await this.waitWhilePaused(jobId);
             }
 
-            const title = options.title || extractResult.title;
-            const m3u8Url = extractResult.m3u8;
-            episodeId = extractResult.episodeId || 'unknown';
+            // Step 1: Extract based on link type
+            this.updateJob(jobId, {
+                step: "extract",
+                status: "running",
+                message: "Extracting video info..."
+            });
+
+            if (linkType === "mp4" || (linkType === "auto" && videoUrl.toLowerCase().endsWith(".mp4"))) {
+                // Direct MP4 download
+                console.log(`[Pipeline] Direct MP4 download: ${videoUrl}`);
+                title = title || "Direct MP4 Video";
+                episodeId = "mp4_" + Date.now();
+                
+                const safeTitle = title.replace(/[^a-zA-Z0-9]/g, "_").substring(0, 50);
+                outputFile = path.join(DOWNLOADED_DIR, `${episodeId}_${safeTitle}.mp4`);
+
+                this.updateJob(jobId, {
+                    step: "download",
+                    status: "running",
+                    title: title,
+                    message: "Downloading MP4 file..."
+                });
+
+                // Download MP4 directly
+                const response = await axios({
+                    method: "GET",
+                    url: videoUrl,
+                    responseType: "stream",
+                    timeout: 300000
+                });
+
+                const writer = fs.createWriteStream(outputFile);
+                let downloadedBytes = 0;
+                const totalBytes = parseInt(response.headers["content-length"] || "0");
+
+                response.data.on("data", (chunk) => {
+                    downloadedBytes += chunk.length;
+                    const percent = totalBytes > 0 ? Math.round((downloadedBytes / totalBytes) * 100) : 0;
+                    
+                    this.updateJob(jobId, {
+                        step: "download",
+                        message: `Downloading MP4: ${percent}%`,
+                        progress: {
+                            percent,
+                            size: downloadedBytes,
+                            sizeFormatted: this.formatBytes(downloadedBytes)
+                        }
+                    });
+                });
+
+                response.data.pipe(writer);
+
+                await new Promise((resolve, reject) => {
+                    writer.on("finish", resolve);
+                    writer.on("error", reject);
+                });
+
+                console.log(`[Pipeline] MP4 downloaded: ${outputFile}`);
+
+            } else if (linkType === "m3u8" || (linkType === "auto" && videoUrl.includes(".m3u8"))) {
+                // Direct M3U8 URL
+                console.log(`[Pipeline] Direct M3U8 URL: ${videoUrl}`);
+                m3u8Url = videoUrl;
+                title = title || "Direct M3U8 Video";
+                episodeId = "m3u8_" + Date.now();
+
+            } else {
+                // Anime URL - extract using anime API
+                const extractor = new AnimeExtractor();
+                extractResult = await extractor.extract(videoUrl, videoType);
+
+                if (!extractResult.success) {
+                    throw new Error(`Extraction failed: ${extractResult.error}`);
+                }
+
+                m3u8Url = extractResult.m3u8;
+                episodeId = extractResult.episodeId || "unknown";
+                
+                // Extract anime slug from URL for episode lookup
+                const animeSlugMatch = videoUrl.match(/\/watch\/([^\/?]+)/);
+                const animeSlug = animeSlugMatch ? animeSlugMatch[1] : null;
+                
+                // Get episode number from episodes API
+                if (animeSlug) {
+                    const fullEpisodeId = `${animeSlug}?ep=${episodeId}`;
+                    const episodeInfo = await this.fetchEpisodeNumber(animeSlug, fullEpisodeId);
+                    if (episodeInfo) {
+                        title = title || `${extractResult.title} Episode ${episodeInfo.episodeNumber}`;
+                    } else {
+                        title = title || extractResult.title;
+                    }
+                } else {
+                    title = title || extractResult.title;
+                }
+
+                // Get English subtitle if available
+                if (extractResult.subtitles && extractResult.subtitles.length > 0) {
+                    const englishSub = extractResult.subtitles.find(sub => 
+                        sub.label && sub.label.toLowerCase() === "english" && sub.file
+                    );
+                    
+                    if (englishSub) {
+                        subtitleUrl = englishSub.file;
+                        console.log(`[Pipeline] Found English subtitle: ${subtitleUrl}`);
+                    }
+                }
+            }
 
             console.log(`[Pipeline] Episode ID: ${episodeId}, Title: ${title}`);
 
             // Generate output filename based on episode ID
-            const safeTitle = title.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 50);
-            outputFile = path.join(DOWNLOADED_DIR, `ep_${episodeId}_${safeTitle}.mp4`);
+            const safeTitle = title.replace(/[^a-zA-Z0-9]/g, "_").substring(0, 50);
+            outputFile = outputFile || path.join(DOWNLOADED_DIR, `ep_${episodeId}_${safeTitle}.mp4`);
 
-            // Check if file already exists
-            if (fs.existsSync(outputFile) && fs.statSync(outputFile).size > 1000) {
-                console.log(`[Pipeline] File already exists: ${outputFile}`);
-                const fileSize = fs.statSync(outputFile).size;
+            // Download M3U8 if we have one and file doesn't exist
+            if (m3u8Url) {
+                // Check if file already exists
+                if (fs.existsSync(outputFile) && fs.statSync(outputFile).size > 1000) {
+                    console.log(`[Pipeline] File already exists: ${outputFile}`);
+                    const fileSize = fs.statSync(outputFile).size;
 
-                this.updateJob(jobId, {
-                    step: 'download',
-                    status: 'running',
-                    title: title,
-                    message: 'File already downloaded, skipping to upload...',
-                    progress: {
-                        percent: 100,
-                        size: fileSize,
-                        sizeFormatted: this.formatBytes(fileSize)
-                    }
-                });
-            } else {
-                // Need to download
-                this.updateJob(jobId, {
-                    step: 'download',
-                    status: 'running',
-                    title: title,
-                    m3u8: m3u8Url,
-                    message: 'Starting download...',
-                    progress: { percent: 0, downloaded: 0, total: 0 }
-                });
-
-                // Check if cancelled
-                if (jobs.get(jobId)?.status === 'cancelled') return;
-
-                // Download to temp first, then move to downloaded folder
-                const tempFile = path.join(TEMP_DIR, `video_${jobId}.mp4`);
-
-                const downloader = new HLSDownloader({
-                    maxParallel: 20,
-                    progressCallback: (stage, data) => {
-                        if (stage === 'downloading') {
-                            this.updateJob(jobId, {
-                                step: 'download',
-                                message: `Downloading: ${data.percent}%`,
-                                progress: {
-                                    downloaded: data.downloaded,
-                                    total: data.total,
-                                    percent: data.percent
-                                }
-                            });
-                        } else if (stage === 'converting') {
-                            this.updateJob(jobId, {
-                                step: 'download',
-                                message: 'Converting to MP4...'
-                            });
+                    this.updateJob(jobId, {
+                        step: "download",
+                        status: "running",
+                        title: title,
+                        message: "File already downloaded, skipping to upload...",
+                        progress: {
+                            percent: 100,
+                            size: fileSize,
+                            sizeFormatted: this.formatBytes(fileSize)
                         }
+                    });
+                } else {
+                    // Need to download
+                    this.updateJob(jobId, {
+                        step: "download",
+                        status: "running",
+                        title: title,
+                        m3u8: m3u8Url,
+                        message: "Starting download...",
+                        progress: { percent: 0, downloaded: 0, total: 0 }
+                    });
+
+                    // Check if cancelled
+                    if (jobs.get(jobId)?.status === "cancelled") return;
+
+                    // Download to temp first, then move to downloaded folder
+                    const tempFile = path.join(TEMP_DIR, `video_${jobId}.mp4`);
+
+                    const downloader = new HLSDownloader({
+                        maxParallel: 20,
+                        referer: extractResult?.source === "9anime" ? "https://rapid-cloud.co/" : undefined,
+                        progressCallback: (stage, data) => {
+                            if (stage === "downloading") {
+                                this.updateJob(jobId, {
+                                    step: "download",
+                                    message: `Downloading: ${data.percent}%`,
+                                    progress: {
+                                        downloaded: data.downloaded,
+                                        total: data.total,
+                                        percent: data.percent
+                                    }
+                                });
+                            } else if (stage === "converting") {
+                                this.updateJob(jobId, {
+                                    step: "download",
+                                    message: "Converting to MP4..."
+                                });
+                            }
+                        }
+                    });
+
+                    const downloadResult = await downloader.download(m3u8Url, tempFile);
+
+                    if (!downloadResult.success) {
+                        throw new Error(`Download failed: ${downloadResult.error}`);
                     }
-                });
 
-                const downloadResult = await downloader.download(m3u8Url, tempFile);
+                    // Move from temp to downloaded folder
+                    console.log(`[Pipeline] Moving file to: ${outputFile}`);
+                    fs.renameSync(tempFile, outputFile);
 
-                if (!downloadResult.success) {
-                    throw new Error(`Download failed: ${downloadResult.error}`);
+                    const fileSize = fs.statSync(outputFile).size;
+                    this.updateJob(jobId, {
+                        step: "download",
+                        status: "running",
+                        message: "Download complete, ready for upload...",
+                        progress: {
+                            percent: 100,
+                            size: fileSize,
+                            sizeFormatted: this.formatBytes(fileSize)
+                        }
+                    });
                 }
+            }
 
-                // Move from temp to downloaded folder
-                console.log(`[Pipeline] Moving file to: ${outputFile}`);
-                fs.renameSync(tempFile, outputFile);
+            // Download subtitle if available
+            if (subtitleUrl) {
+                try {
+                    this.updateJob(jobId, {
+                        step: "subtitle",
+                        status: "running",
+                        message: "Downloading subtitle..."
+                    });
 
-                const fileSize = fs.statSync(outputFile).size;
-                this.updateJob(jobId, {
-                    step: 'download',
-                    status: 'running',
-                    message: 'Download complete, ready for upload...',
-                    progress: {
-                        percent: 100,
-                        size: fileSize,
-                        sizeFormatted: this.formatBytes(fileSize)
+                    const subtitleFileName = `${episodeId}_subtitle.vtt`;
+                    subtitlePath = path.join(TEMP_DIR, subtitleFileName);
+                    
+                    const subResult = await this.downloadSubtitle(subtitleUrl, subtitlePath);
+                    if (!subResult.success) {
+                        console.log(`[Pipeline] Subtitle download failed, continuing without subtitle`);
+                        subtitlePath = null;
                     }
-                });
+                } catch (error) {
+                    console.error(`[Pipeline] Subtitle error: ${error.message}`);
+                    subtitlePath = null;
+                }
             }
 
             // Check if cancelled
-            if (jobs.get(jobId)?.status === 'cancelled') {
+            if (jobs.get(jobId)?.status === "cancelled") {
                 return;
             }
 
             // Step 3: Upload to Rumble
             this.updateJob(jobId, {
-                step: 'upload',
-                status: 'running',
-                message: 'Uploading to Rumble...',
+                step: "upload",
+                status: "running",
+                message: "Uploading to Rumble...",
                 progress: { percent: 0 }
             });
 
             const uploader = new RumbleUploader(cookies);
             uploader.onProgress((stage, data) => {
-                if (stage === 'chunk_uploaded') {
+                if (stage === "chunk_uploaded") {
                     this.updateJob(jobId, {
-                        step: 'upload',
+                        step: "upload",
                         message: `Uploading: ${data.percent}%`,
                         progress: {
                             chunk: data.chunk,
@@ -235,10 +467,11 @@ class Pipeline {
             const uploadResult = await uploader.upload(
                 outputFile,
                 title,
-                options.description || '',
+                options.description || "",
                 {
-                    visibility: options.visibility || 'unlisted',
-                    tags: options.tags || ''
+                    visibility: options.visibility || "unlisted",
+                    tags: options.tags || "",
+                    subtitlePath: subtitlePath
                 }
             );
 
@@ -253,11 +486,16 @@ class Pipeline {
             if (fs.existsSync(outputFile)) {
                 fs.unlinkSync(outputFile);
             }
+            
+            // Delete subtitle file if exists
+            if (subtitlePath && fs.existsSync(subtitlePath)) {
+                fs.unlinkSync(subtitlePath);
+            }
 
             // Complete
             this.updateJob(jobId, {
-                step: 'complete',
-                status: 'completed',
+                step: "complete",
+                status: "completed",
                 completed: true,
                 success: true,
                 videoId: uploadResult.videoId,
@@ -269,7 +507,7 @@ class Pipeline {
             console.error(`[Pipeline] Error: ${error.message}`);
             // Note: We do NOT delete outputFile on error - keep it for retry
             this.updateJob(jobId, {
-                status: 'error',
+                status: "error",
                 error: error.message,
                 completed: true
             });
@@ -280,10 +518,10 @@ class Pipeline {
      * Format bytes helper
      */
     static formatBytes(bytes) {
-        if (bytes >= 1073741824) return (bytes / 1073741824).toFixed(2) + ' GB';
-        if (bytes >= 1048576) return (bytes / 1048576).toFixed(2) + ' MB';
-        if (bytes >= 1024) return (bytes / 1024).toFixed(2) + ' KB';
-        return bytes + ' bytes';
+        if (bytes >= 1073741824) return (bytes / 1073741824).toFixed(2) + " GB";
+        if (bytes >= 1048576) return (bytes / 1048576).toFixed(2) + " MB";
+        if (bytes >= 1024) return (bytes / 1024).toFixed(2) + " KB";
+        return bytes + " bytes";
     }
 }
 

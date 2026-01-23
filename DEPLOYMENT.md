@@ -101,24 +101,66 @@ npm install
 
 ---
 
-## Step 7: Set Chrome Path for Linux
+## Step 7: Configure Environment Variables
 
-Update the Chrome path in `src/extractors/9anime.js`:
+Create a `.env` file in the project root:
 
-```javascript
-const CHROME_PATHS = [
-    '/usr/bin/google-chrome',
-    '/usr/bin/google-chrome-stable',
-    '/usr/bin/chromium-browser',
-    process.env.CHROME_PATH
-].filter(Boolean);
+```bash
+nano .env
 ```
 
-This should already be configured, but verify it's there.
+Add the following configuration:
+
+```env
+# JWT Secret (change this to a random secure string)
+JWT_SECRET=your-super-secret-jwt-key-change-this-to-random-string
+
+# Authentication Password
+AUTH_PASSWORD=admin123
+
+# API Configuration
+API_BASE=https://anime-api-itzzzme.vercel.app/api
+
+# Rumble Upload Host
+RUMBLE_UPLOAD_HOST=https://web17.rumble.com
+
+# Chrome Path (adjust based on your installation)
+CHROME_PATH=/usr/bin/google-chrome-stable
+
+# Server Port (optional, defaults to 3000)
+PORT=3000
+
+# Polling Interval for frontend (milliseconds)
+POLL_INTERVAL=3000
+```
+
+**Important Security Notes:**
+- **Change `JWT_SECRET`** to a random string (at least 32 characters)
+- **Change `AUTH_PASSWORD`** to a strong password
+- Generate secure random string for JWT_SECRET:
+  ```bash
+  node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+  ```
+
+Save the file (Ctrl+X, then Y, then Enter in nano).
 
 ---
 
-## Step 8: Install PM2 (Process Manager)
+## Step 8: Set Chrome Path for Linux
+
+The Chrome path is now configured in the `.env` file. Verify Chrome installation location:
+
+```bash
+which google-chrome-stable
+# or
+which chromium-browser
+```
+
+Update `CHROME_PATH` in `.env` if the path is different.
+
+---
+
+## Step 9: Install PM2 (Process Manager)
 
 ```bash
 npm install -g pm2
@@ -136,9 +178,11 @@ pm2 status
 pm2 logs rumble-pipeline
 ```
 
+**Note:** The app will automatically load environment variables from `.env` file.
+
 ---
 
-## Step 9: Configure Firewall
+## Step 10: Configure Firewall
 
 ```bash
 # Allow port 3000 (or your chosen port)
@@ -149,16 +193,25 @@ ufw allow 3000
 
 ---
 
-## Step 10: Access Your App
+## Step 11: Access Your App
 
 Open in browser:
 ```
 http://YOUR_VPS_IP:3000
 ```
 
+**Login Credentials:**
+- Password: The value you set in `AUTH_PASSWORD` in `.env` (default: admin123)
+
+**First Time Setup:**
+1. Login with your password
+2. Enter your anime URL or direct M3U8/MP4 URL
+3. Add your Rumble cookies (F12 → Network → Copy cookies from rumble.com)
+4. Cookies will be saved automatically in browser localStorage
+
 ---
 
-## Optional: Set Up Nginx Reverse Proxy (via aaPanel)
+## Step 12: Optional: Set Up Nginx Reverse Proxy (via aaPanel)
 
 1. **aaPanel → Website → Add Site**
 2. Enter your domain
@@ -190,6 +243,27 @@ pm2 monit
 ---
 
 ## Troubleshooting
+
+**Environment Variables Not Loading:**
+```bash
+# Check if .env file exists
+ls -la /var/www/rumble/.env
+
+# View .env content
+cat /var/www/rumble/.env
+
+# Restart PM2 after .env changes
+pm2 restart rumble-pipeline
+```
+
+**Login Issues:**
+```bash
+# Check AUTH_PASSWORD in .env
+grep AUTH_PASSWORD /var/www/rumble/.env
+
+# Verify JWT_SECRET is set
+grep JWT_SECRET /var/www/rumble/.env
+```
 
 **Chrome won't start:**
 ```bash

@@ -8,11 +8,12 @@
  * 3. Capture m3u8 from network requests
  */
 
-const axios = require('axios');
-const puppeteer = require('puppeteer-core');
-const fs = require('fs');
+const axios = require("axios");
+const puppeteer = require("puppeteer-core");
+const fs = require("fs");
 
-const API_BASE = 'https://anime-api-itzzzme.vercel.app/api/stream';
+require("dotenv").config();
+const API_BASE = process.env.API_BASE || "https://anime-api-itzzzme.vercel.app/api";
 
 // Chrome paths
 const CHROME_PATHS = [
@@ -43,63 +44,63 @@ class AnimeExtractor {
     /**
      * Extract video stream from 9anime URL
      */
-    async extract(url) {
+    async extract(url, videoType = "sub") {
         try {
             // Check if it's a direct m3u8 URL
-            if (url.includes('.m3u8')) {
+            if (url.includes(".m3u8")) {
                 return {
                     success: true,
                     m3u8: url,
-                    title: 'Direct M3U8',
-                    episodeId: 'direct_' + Date.now(),
-                    source: 'direct'
+                    title: "Direct M3U8",
+                    episodeId: "direct_" + Date.now(),
+                    source: "direct"
                 };
             }
 
             // Parse episode ID from URL
             const episodeId = this.parseEpisodeId(url);
             if (!episodeId) {
-                return { success: false, error: 'Could not parse episode ID from URL. Expected format: ?ep=XXXXX' };
+                return { success: false, error: "Could not parse episode ID from URL. Expected format: ?ep=XXXXX" };
             }
 
             // Get anime slug from URL
             const animeSlug = this.parseAnimeSlug(url);
             if (!animeSlug) {
-                return { success: false, error: 'Could not parse anime slug from URL' };
+                return { success: false, error: "Could not parse anime slug from URL" };
             }
 
-            console.log(`[9anime] Anime: ${animeSlug}, Episode: ${episodeId}`);
+            console.log(`[9anime] Anime: ${animeSlug}, Episode: ${episodeId}, Type: ${videoType}`);
 
             // Step 1: Call the anime API to get iframe URL
             const apiId = `${animeSlug}?ep=${episodeId}`;
-            const apiUrl = `${API_BASE}?id=${encodeURIComponent(apiId)}&server=hd-1&type=sub`;
+            const apiUrl = `${API_BASE}/stream?id=${encodeURIComponent(apiId)}&server=hd-1&type=${videoType}`;
 
-            console.log(`[9anime] Calling API...`);
+            console.log(`[9anime] Calling API: ${apiUrl}`);
             const response = await axios.get(apiUrl, {
                 timeout: this.timeout,
                 headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                    'Accept': 'application/json'
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                    "Accept": "application/json"
                 }
             });
 
             const data = response.data;
 
             if (!data.success || !data.results?.streamingLink) {
-                return { success: false, error: 'API returned no streaming link' };
+                return { success: false, error: "API returned no streaming link" };
             }
 
             const streamingLink = data.results.streamingLink;
             const iframeUrl = streamingLink.iframe;
 
             if (!iframeUrl) {
-                return { success: false, error: 'No iframe URL found in API response' };
+                return { success: false, error: "No iframe URL found in API response" };
             }
 
             console.log(`[9anime] Got iframe URL: ${iframeUrl}`);
 
             // Step 2: Add _debug=ok parameter to iframe URL
-            const debugUrl = iframeUrl + (iframeUrl.includes('?') ? '&' : '?') + '_debug=ok';
+            const debugUrl = iframeUrl + (iframeUrl.includes("?") ? "&" : "?") + "_debug=ok";
             console.log(`[9anime] Opening debug URL: ${debugUrl}`);
 
             // Step 3: Open in Puppeteer and capture m3u8
@@ -111,8 +112,8 @@ class AnimeExtractor {
 
             // Extract title from anime slug
             let title = animeSlug
-                .replace(/-\d+$/, '')
-                .replace(/-/g, ' ')
+                .replace(/-\d+$/, "")
+                .replace(/-/g, " ")
                 .replace(/\b\w/g, c => c.toUpperCase());
 
             return {
@@ -120,12 +121,12 @@ class AnimeExtractor {
                 m3u8: m3u8Result.m3u8,
                 title: title,
                 episodeId: episodeId,
-                source: '9anime',
+                source: "9anime",
                 subtitles: streamingLink.tracks || []
             };
 
         } catch (error) {
-            console.error('[9anime] Error:', error.message);
+            console.error("[9anime] Error:", error.message);
             return { success: false, error: `Extraction error: ${error.message}` };
         }
     }

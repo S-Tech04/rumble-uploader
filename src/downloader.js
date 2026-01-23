@@ -9,6 +9,7 @@ const path = require('path');
 const { exec } = require('child_process');
 const { promisify } = require('util');
 const execAsync = promisify(exec);
+const puppeteer = require('puppeteer-core');
 
 class HLSDownloader {
     constructor(options = {}) {
@@ -40,6 +41,14 @@ class HLSDownloader {
                 fs.mkdirSync(tempDir, { recursive: true });
             }
             console.log(`[Downloader] Temp dir: ${tempDir}`);
+
+            // Extract M3U8 from player page if needed
+            if (!m3u8Url.includes('.m3u8')) {
+                console.log(`[Downloader] URL doesn't contain .m3u8, extracting from player page...`);
+                this.reportProgress('extracting', { message: 'Extracting M3U8 URL from player page...' });
+                m3u8Url = await this.extractM3U8FromPage(m3u8Url);
+                console.log(`[Downloader] Extracted M3U8 URL: ${m3u8Url}`);
+            }
 
             // 1. Fetch playlist
             this.reportProgress('fetching', { message: 'Fetching playlist...' });
@@ -98,6 +107,66 @@ class HLSDownloader {
     }
 
     /**
+     * Extract M3U8 URL from player page using Puppeteer
+     */
+    async extractM3U8FromPage(pageUrl) {
+        let browser = null;
+        let capturedM3U8 = null;
+
+        try {
+            browser = await puppeteer.launch({
+                headless: true,
+                executablePath: process.env.CHROME_PATH || 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+                args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+            });
+
+            const page = await browser.newPage();
+
+            await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+
+            page.on('request', request => {
+                const url = request.url();
+                if (url.includes('.m3u8')) {
+                    console.log(`[Downloader] Captured M3U8 URL: ${url}`);
+                    if (!capturedM3U8) {
+                        capturedM3U8 = url;
+                    }
+                }
+            });
+
+            console.log(`[Downloader] Navigating to player page...`);
+            await page.goto(pageUrl, { waitUntil: 'networkidle2', timeout: 60000 });
+
+            await new Promise(resolve => setTimeout(resolve, 5000));
+
+            if (!capturedM3U8) {
+                const iframes = await page.frames();
+                for (const frame of iframes) {
+                    try {
+                        await new Promise(resolve => setTimeout(resolve, 2000));
+                    } catch (e) {
+                        // Ignore timeout
+                    }
+                }
+
+                await new Promise(resolve => setTimeout(resolve, 3000));
+            }
+
+            await browser.close();
+
+            if (!capturedM3U8) {
+                throw new Error('Could not extract M3U8 URL from player page. Please provide a direct M3U8 URL.');
+            }
+
+            return capturedM3U8;
+
+        } catch (error) {
+            if (browser) await browser.close();
+            throw new Error(`Failed to extract M3U8: ${error.message}`);
+        }
+    }
+
+    /**
      * Fetch and resolve playlist
      */
     async fetchPlaylist(m3u8Url) {
@@ -107,6 +176,12 @@ class HLSDownloader {
         });
 
         let content = response.data;
+
+        // Validate that this is actually an M3U8 file
+        if (!content.includes('#EXTM3U')) {
+            throw new Error('Invalid M3U8 URL: The extracted URL does not contain a valid M3U8 playlist.');
+        }
+
         let baseUrl = m3u8Url.substring(0, m3u8Url.lastIndexOf('/') + 1);
 
         // Handle master playlist
