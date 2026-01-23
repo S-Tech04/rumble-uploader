@@ -178,9 +178,9 @@ class RumbleUploader {
             formData.append('title', title);
             formData.append('description', description || '');
             formData.append('video[]', videoFileId);
-            formData.append('featured', 0);
-            formData.append('rights', 1);
-            formData.append('terms', 1);
+            formData.append('featured', '0');
+            formData.append('rights', '1');
+            formData.append('terms', '1');
             formData.append('facebookUpload', '');
             formData.append('vimeoUpload', '');
             formData.append('infoWho', '');
@@ -188,18 +188,18 @@ class RumbleUploader {
             formData.append('infoWhere', '');
             formData.append('infoExtUser', '');
             formData.append('tags', options.tags || '');
-            formData.append('channelId', 0);
-            formData.append('siteChannelId', 15);
-            formData.append('mediaChannelId', 0);
+            formData.append('channelId', '0');
+            formData.append('siteChannelId', '15');
+            formData.append('mediaChannelId', '0');
             formData.append('isGamblingRelated', 'false');
-            formData.append('set_default_channel_id', 0);
-            formData.append('sendPush', 0);
-            formData.append('setFeaturedForUser', 0);
-            formData.append('setFeaturedForChannel', 0);
-            formData.append('visibility', 'unlisted');
+            formData.append('set_default_channel_id', '1');
+            formData.append('sendPush', '0');
+            formData.append('setFeaturedForUser', '0');
+            formData.append('setFeaturedForChannel', '0');
+            formData.append('visibility', options.visibility || 'unlisted');
             formData.append('availability', 'free');
             formData.append('file_meta', fileMeta);
-            formData.append('thumb', 4);
+            formData.append('thumb', '4');
 
             const formResponse = await axios({
                 method: 'POST',
@@ -207,10 +207,20 @@ class RumbleUploader {
                 data: formData.toString(),
                 headers: {
                     'Cookie': this.cookies,
-                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                    'Accept': 'text/html, */*; q=0.01',
+                    'Accept-Language': 'en-US,en;q=0.9',
+                    'Accept-Encoding': 'gzip, deflate, br',
                     'Origin': 'https://rumble.com',
                     'Referer': 'https://rumble.com/',
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36',
+                    'Sec-CH-UA': '"Not(A:Brand";v="8", "Chromium";v="144", "Google Chrome";v="144"',
+                    'Sec-CH-UA-Mobile': '?0',
+                    'Sec-CH-UA-Platform': '"Windows"',
+                    'Sec-Fetch-Dest': 'empty',
+                    'Sec-Fetch-Mode': 'cors',
+                    'Sec-Fetch-Site': 'same-site',
+                    'Priority': 'u=1, i'
                 }
             });
 
