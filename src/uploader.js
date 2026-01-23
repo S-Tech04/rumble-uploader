@@ -178,9 +178,9 @@ class RumbleUploader {
             formData.append('title', title);
             formData.append('description', description || '');
             formData.append('video[]', videoFileId);
-            formData.append('featured', '0');
-            formData.append('rights', '1');
-            formData.append('terms', '1');
+            formData.append('featured', 0);
+            formData.append('rights', 1);
+            formData.append('terms', 1);
             formData.append('facebookUpload', '');
             formData.append('vimeoUpload', '');
             formData.append('infoWho', '');
@@ -188,18 +188,18 @@ class RumbleUploader {
             formData.append('infoWhere', '');
             formData.append('infoExtUser', '');
             formData.append('tags', options.tags || '');
-            formData.append('channelId', 'undefined');
-            formData.append('siteChannelId', '15');
-            formData.append('mediaChannelId', '0');
+            formData.append('channelId', 0);
+            formData.append('siteChannelId', 15);
+            formData.append('mediaChannelId', 0);
             formData.append('isGamblingRelated', 'false');
-            formData.append('set_default_channel_id', '0');
-            formData.append('sendPush', '0');
-            formData.append('setFeaturedForUser', '0');
-            formData.append('setFeaturedForChannel', '0');
+            formData.append('set_default_channel_id', 0);
+            formData.append('sendPush', 0);
+            formData.append('setFeaturedForUser', 0);
+            formData.append('setFeaturedForChannel', 0);
             formData.append('visibility', 'unlisted');
             formData.append('availability', 'free');
             formData.append('file_meta', fileMeta);
-            formData.append('thumb', '4');
+            formData.append('thumb', 4);
 
             const formResponse = await axios({
                 method: 'POST',
