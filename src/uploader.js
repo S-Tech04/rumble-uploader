@@ -188,17 +188,18 @@ class RumbleUploader {
             formData.append('infoWhere', '');
             formData.append('infoExtUser', '');
             formData.append('tags', options.tags || '');
-            formData.append('channelId', options.channelId || '0');
+            formData.append('channelId', 'undefined');
             formData.append('siteChannelId', '15');
-            formData.append('mediaChannelId', '4443');
+            formData.append('mediaChannelId', '0');
             formData.append('isGamblingRelated', 'false');
-            formData.append('set_default_channel_id', '1');
+            formData.append('set_default_channel_id', '0');
             formData.append('sendPush', '0');
             formData.append('setFeaturedForUser', '0');
             formData.append('setFeaturedForChannel', '0');
-            formData.append('visibility', options.visibility || 'unlisted');
+            formData.append('visibility', 'unlisted');
             formData.append('availability', 'free');
             formData.append('file_meta', fileMeta);
+            formData.append('thumb', '4');
 
             const formResponse = await axios({
                 method: 'POST',
@@ -264,20 +265,20 @@ class RumbleUploader {
                 
                 // Upload subtitle if provided
                 let subtitleUploaded = false;
-                if (options.subtitlePath && fs.existsSync(options.subtitlePath)) {
-                    console.log('[Uploader] Uploading subtitle...');
-                    try {
-                        const subResult = await this.uploadSubtitle(mediaId, options.subtitlePath, title);
-                        if (subResult.success) {
-                            console.log('[Uploader] Subtitle uploaded successfully');
-                            subtitleUploaded = true;
-                        } else {
-                            console.warn('[Uploader] Subtitle upload failed:', subResult.error);
-                        }
-                    } catch (subError) {
-                        console.warn('[Uploader] Subtitle upload error:', subError.message);
-                    }
-                }
+                // if (options.subtitlePath && fs.existsSync(options.subtitlePath)) {
+                //     console.log('[Uploader] Uploading subtitle...');
+                //     try {
+                //         const subResult = await this.uploadSubtitle(mediaId, options.subtitlePath, title);
+                //         if (subResult.success) {
+                //             console.log('[Uploader] Subtitle uploaded successfully');
+                //             subtitleUploaded = true;
+                //         } else {
+                //             console.warn('[Uploader] Subtitle upload failed:', subResult.error);
+                //         }
+                //     } catch (subError) {
+                //         console.warn('[Uploader] Subtitle upload error:', subError.message);
+                //     }
+                // }
                 
                 return {
                     success: true,
