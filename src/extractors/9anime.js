@@ -76,13 +76,44 @@ class AnimeExtractor {
             const apiUrl = `${API_BASE}/stream?id=${encodeURIComponent(apiId)}&server=hd-1&type=${videoType}`;
 
             console.log(`[9anime] Calling API: ${apiUrl}`);
-            const response = await axios.get(apiUrl, {
-                timeout: this.timeout,
-                headers: {
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                    "Accept": "application/json"
+            
+            let response;
+            let retries = 3;
+            let lastError;
+            
+            for (let attempt = 1; attempt <= retries; attempt++) {
+                try {
+                    response = await axios.get(apiUrl, {
+                        timeout: this.timeout,
+                        headers: {
+                            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                            "Accept": "application/json, text/plain, */*",
+                            "Accept-Language": "en-US,en;q=0.9",
+                            "Accept-Encoding": "gzip, deflate, br",
+                            "Referer": "https://9animetv.to/",
+                            "Origin": "https://9animetv.to",
+                            "Connection": "keep-alive",
+                            "Sec-Fetch-Dest": "empty",
+                            "Sec-Fetch-Mode": "cors",
+                            "Sec-Fetch-Site": "cross-site"
+                        }
+                    });
+                    break;
+                } catch (error) {
+                    lastError = error;
+                    console.log(`[9anime] API call failed (attempt ${attempt}/${retries}): ${error.message}`);
+                    if (attempt < retries) {
+                        await new Promise(resolve => setTimeout(resolve, 2000 * attempt));
+                    }
                 }
-            });
+            }
+            
+            if (!response) {
+                const errorMsg = lastError?.response?.status === 403 
+                    ? "API blocked request (403 Forbidden). Your server IP may be blocked. Try using a VPN or different VPS provider."
+                    : `API request failed: ${lastError?.message || 'Unknown error'}`;
+                return { success: false, error: errorMsg };
+            }
 
             const data = response.data;
 
@@ -147,13 +178,18 @@ class AnimeExtractor {
             console.log(`[9anime] Launching browser...`);
             browser = await puppeteer.launch({
                 executablePath: chromePath,
-                headless: 'new', // Use headless mode 'new' for headless mode
+                headless: 'new',
                 args: [
                     '--no-sandbox',
                     '--disable-setuid-sandbox',
                     '--disable-dev-shm-usage',
                     '--disable-gpu',
-                    '--disable-web-security'
+                    '--disable-software-rasterizer',
+                    '--disable-web-security',
+                    '--disable-features=IsolateOrigins,site-per-process',
+                    '--disable-blink-features=AutomationControlled',
+                    '--no-first-run',
+                    '--no-zygote'
                 ]
             });
 
