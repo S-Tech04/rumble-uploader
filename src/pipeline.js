@@ -126,6 +126,57 @@ class Pipeline {
     }
 
     /**
+     * Clear completed jobs
+     */
+    static clearCompletedJobs() {
+        let clearedCount = 0;
+        for (const [jobId, job] of jobs.entries()) {
+            if (job.status === "completed") {
+                jobs.delete(jobId);
+                clearedCount++;
+            }
+        }
+        return { success: true, clearedCount };
+    }
+
+    /**
+     * Delete selected jobs by IDs
+     */
+    static deleteSelectedJobs(jobIds) {
+        let deletedCount = 0;
+        for (const jobId of jobIds) {
+            if (jobs.has(jobId)) {
+                const job = jobs.get(jobId);
+                // Cancel running jobs first
+                if (job.status === "running" || job.status === "paused") {
+                    job.status = "cancelled";
+                    job.completed = true;
+                }
+                jobs.delete(jobId);
+                deletedCount++;
+            }
+        }
+        return { success: true, deletedCount };
+    }
+
+    /**
+     * Delete a single job by ID
+     */
+    static deleteJob(jobId) {
+        if (jobs.has(jobId)) {
+            const job = jobs.get(jobId);
+            // Cancel running jobs first
+            if (job.status === "running" || job.status === "paused") {
+                job.status = "cancelled";
+                job.completed = true;
+            }
+            jobs.delete(jobId);
+            return { success: true, deleted: true };
+        }
+        return { success: false, error: "Job not found" };
+    }
+
+    /**
      * Update job status
      */
     static updateJob(jobId, updates) {
@@ -142,13 +193,13 @@ class Pipeline {
         try {
             const episodesUrl = `${API_BASE}/episodes/${animeId}`;
             console.log(`[Pipeline] Fetching episodes from: ${episodesUrl}`);
-            
+
             const response = await axios.get(episodesUrl, { timeout: 10000 });
-            
+
             if (response.data.success && response.data.results.episodes) {
                 const episodes = response.data.results.episodes;
                 const episode = episodes.find(ep => ep.id === episodeIdFromUrl);
-                
+
                 if (episode) {
                     console.log(`[Pipeline] Found episode: ${episode.episode_no} - ${episode.title}`);
                     return {
@@ -174,7 +225,7 @@ class Pipeline {
                 responseType: "text",
                 timeout: 30000
             });
-            
+
             fs.writeFileSync(outputPath, response.data, "utf8");
             console.log(`[Pipeline] Subtitle saved to: ${outputPath}`);
             return { success: true, path: outputPath };
@@ -229,7 +280,7 @@ class Pipeline {
                 console.log(`[Pipeline] Direct MP4 download: ${videoUrl}`);
                 title = title || "Direct MP4 Video";
                 episodeId = "mp4_" + Date.now();
-                
+
                 const safeTitle = title.replace(/[^a-zA-Z0-9]/g, "_").substring(0, 50);
                 outputFile = path.join(DOWNLOADED_DIR, `${episodeId}_${safeTitle}.mp4`);
 
@@ -255,7 +306,7 @@ class Pipeline {
                 response.data.on("data", (chunk) => {
                     downloadedBytes += chunk.length;
                     const percent = totalBytes > 0 ? Math.round((downloadedBytes / totalBytes) * 100) : 0;
-                    
+
                     this.updateJob(jobId, {
                         step: "download",
                         message: `Downloading MP4: ${percent}%`,
@@ -294,11 +345,11 @@ class Pipeline {
 
                 m3u8Url = extractResult.m3u8;
                 episodeId = extractResult.episodeId || "unknown";
-                
+
                 // Extract anime slug from URL for episode lookup
                 const animeSlugMatch = videoUrl.match(/\/watch\/([^\/?]+)/);
                 const animeSlug = animeSlugMatch ? animeSlugMatch[1] : null;
-                
+
                 // Get episode number from episodes API
                 if (animeSlug) {
                     const fullEpisodeId = `${animeSlug}?ep=${episodeId}`;
@@ -314,10 +365,10 @@ class Pipeline {
 
                 // Get English subtitle if available
                 if (extractResult.subtitles && extractResult.subtitles.length > 0) {
-                    const englishSub = extractResult.subtitles.find(sub => 
+                    const englishSub = extractResult.subtitles.find(sub =>
                         sub.label && sub.label.toLowerCase() === "english" && sub.file
                     );
-                    
+
                     if (englishSub) {
                         subtitleUrl = englishSub.file;
                         console.log(`[Pipeline] Found English subtitle: ${subtitleUrl}`);
@@ -424,7 +475,7 @@ class Pipeline {
 
                     const subtitleFileName = `${episodeId}_subtitle.vtt`;
                     subtitlePath = path.join(TEMP_DIR, subtitleFileName);
-                    
+
                     const subResult = await this.downloadSubtitle(subtitleUrl, subtitlePath);
                     if (!subResult.success) {
                         console.log(`[Pipeline] Subtitle download failed, continuing without subtitle`);
@@ -486,7 +537,7 @@ class Pipeline {
             if (fs.existsSync(outputFile)) {
                 fs.unlinkSync(outputFile);
             }
-            
+
             // Delete subtitle file if exists
             if (subtitlePath && fs.existsSync(subtitlePath)) {
                 fs.unlinkSync(subtitlePath);

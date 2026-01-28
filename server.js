@@ -141,7 +141,7 @@ app.get("/api/job/:jobId", verifyToken, (req, res) => {
  */
 app.get("/api/job/:jobId/stream", verifyToken, (req, res) => {
     const jobId = req.params.jobId;
-    
+
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
@@ -151,7 +151,7 @@ app.get("/api/job/:jobId/stream", verifyToken, (req, res) => {
         const job = Pipeline.getStatus(jobId);
         if (job && !job.error) {
             res.write(`data: ${JSON.stringify(job)}\n\n`);
-            
+
             if (job.completed || job.status === "error" || job.status === "cancelled") {
                 res.end();
                 clearInterval(interval);
@@ -213,6 +213,37 @@ app.post("/api/resume/:jobId", verifyToken, (req, res) => {
  */
 app.post("/api/clear-failed", verifyToken, (req, res) => {
     const result = Pipeline.clearFailedJobs();
+    res.json(result);
+});
+
+/**
+ * Clear completed jobs
+ * POST /api/clear-completed
+ */
+app.post("/api/clear-completed", verifyToken, (req, res) => {
+    const result = Pipeline.clearCompletedJobs();
+    res.json(result);
+});
+
+/**
+ * Delete selected jobs
+ * POST /api/delete-selected
+ */
+app.post("/api/delete-selected", verifyToken, (req, res) => {
+    const { jobIds } = req.body;
+    if (!jobIds || !Array.isArray(jobIds)) {
+        return res.status(400).json({ success: false, error: "Missing or invalid jobIds array" });
+    }
+    const result = Pipeline.deleteSelectedJobs(jobIds);
+    res.json(result);
+});
+
+/**
+ * Delete a single job
+ * DELETE /api/job/:jobId
+ */
+app.delete("/api/job/:jobId", verifyToken, (req, res) => {
+    const result = Pipeline.deleteJob(req.params.jobId);
     res.json(result);
 });
 

@@ -42,11 +42,13 @@ class RumbleUploader {
             // Get file info
             const stats = fs.statSync(filePath);
             const fileSize = stats.size;
+            const fileModified = stats.mtimeMs; // Actual file modification timestamp
             const originalFileName = path.basename(filePath);
 
-            // Generate unique filename with timestamp
+            // Generate unique filename with timestamp (same format as browser)
             const timestamp = Date.now();
-            const randomId = Math.floor(Math.random() * 1000000);
+            // Browser uses 6-digit random ID, ensure we do the same
+            const randomId = Math.floor(100000 + Math.random() * 900000); // Always 6 digits
             const uploadFileName = `${timestamp}-${randomId}.mp4`;
 
             const chunkQty = Math.ceil(fileSize / CHUNK_SIZE);
@@ -83,8 +85,11 @@ class RumbleUploader {
                     headers: {
                         'Cookie': this.cookies,
                         'Content-Type': 'application/octet-stream',
+                        'Cache-Control': 'no-cache',
+                        'Pragma': 'no-cache',
                         'Origin': 'https://rumble.com',
-                        'Referer': 'https://rumble.com/'
+                        'Referer': 'https://rumble.com/',
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36'
                     },
                     maxBodyLength: Infinity,
                     maxContentLength: Infinity
@@ -109,8 +114,11 @@ class RumbleUploader {
                 url: mergeUrl,
                 headers: {
                     'Cookie': this.cookies,
+                    'Cache-Control': 'no-cache',
+                    'Pragma': 'no-cache',
                     'Origin': 'https://rumble.com',
-                    'Referer': 'https://rumble.com/'
+                    'Referer': 'https://rumble.com/',
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36'
                 }
             });
 
@@ -131,47 +139,83 @@ class RumbleUploader {
                 url: durationUrl,
                 headers: {
                     'Cookie': this.cookies,
+                    'Cache-Control': 'no-cache',
+                    'Pragma': 'no-cache',
                     'Origin': 'https://rumble.com',
                     'Referer': 'https://rumble.com/',
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36'
                 }
             });
 
             const duration = parseFloat(durationResponse.data) || 0;
             console.log(`[Uploader] Duration: ${duration}s`);
 
-            // Step 4: Get thumbnails (optional, but Rumble expects it)
+            // Step 4: Get thumbnails - Rumble generates thumbnails and returns an ID we must use
             console.log('[Uploader] Getting thumbnails...');
+            let thumbId = '4'; // Default fallback
             try {
                 const thumbnailsUrl = `${RUMBLE_UPLOAD_HOST}/upload.php?thumbnails=${videoFileId}&api=${API_VERSION}`;
-                await axios({
+                const thumbnailsResponse = await axios({
                     method: 'GET',
                     url: thumbnailsUrl,
                     headers: {
                         'Cookie': this.cookies,
+                        'Cache-Control': 'no-cache',
+                        'Pragma': 'no-cache',
                         'Origin': 'https://rumble.com',
                         'Referer': 'https://rumble.com/',
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36'
                     }
                 });
+
+                // Parse thumbnail response to get the thumb ID
+                // Response can be JSON with thumbnail IDs or HTML
+                const thumbData = thumbnailsResponse.data;
+                console.log('[Uploader] Thumbnails response:', typeof thumbData === 'string' ? thumbData.substring(0, 200) : JSON.stringify(thumbData).substring(0, 200));
+
+                if (typeof thumbData === 'object' && thumbData.thumbs) {
+                    // JSON response with thumbs array
+                    const thumbs = thumbData.thumbs;
+                    if (Array.isArray(thumbs) && thumbs.length > 0) {
+                        thumbId = String(thumbs[0].id || thumbs[0]);
+                    }
+                } else if (typeof thumbData === 'string') {
+                    // Try to extract thumb ID from HTML/text response
+                    // Look for patterns like data-thumb="1003" or thumbId: 1003
+                    const thumbMatch = thumbData.match(/(?:data-thumb=["']?|thumbId["\s:]+|"id"\s*:\s*)(\d+)/i);
+                    if (thumbMatch) {
+                        thumbId = thumbMatch[1];
+                    } else {
+                        // Sometimes the response is just a number or comma-separated IDs
+                        const numMatch = thumbData.match(/^(\d+)/);
+                        if (numMatch) {
+                            thumbId = numMatch[1];
+                        }
+                    }
+                }
+                console.log(`[Uploader] Using thumb ID: ${thumbId}`);
             } catch (e) {
-                console.log('[Uploader] Thumbnail fetch failed (non-critical)');
+                console.log('[Uploader] Thumbnail fetch failed (non-critical), using default thumb');
             }
 
             // Step 5: Submit form
             console.log('[Uploader] Submitting form...');
             const formUrl = `${RUMBLE_UPLOAD_HOST}/upload.php?form=1&api=${API_VERSION}`;
 
-            // Build form data as URL encoded
+            // Build file_meta exactly like the browser does
+            const timeEnd = Date.now();
+            const uploadDuration = (timeEnd - timestamp) / 1000; // seconds
+            const uploadSpeed = Math.round(fileSize / uploadDuration);
+
             const fileMeta = JSON.stringify({
                 name: originalFileName,
-                modified: Date.now(),
+                modified: Math.round(fileModified), // Use actual file modification time
                 size: fileSize,
                 type: 'video/mp4',
                 time_start: timestamp,
-                speed: Math.round(fileSize / 60), // Approximate
+                speed: uploadSpeed,
                 num_chunks: chunkQty,
-                time_end: Date.now()
+                time_end: timeEnd
             });
 
             const formData = new URLSearchParams();
@@ -189,7 +233,7 @@ class RumbleUploader {
             formData.append('infoExtUser', '');
             formData.append('tags', options.tags || '');
             formData.append('channelId', '0');
-            formData.append('siteChannelId', '15');
+            formData.append('siteChannelId', options.siteChannelId || '15');
             formData.append('mediaChannelId', '0');
             formData.append('isGamblingRelated', 'false');
             formData.append('set_default_channel_id', '1');
@@ -199,7 +243,7 @@ class RumbleUploader {
             formData.append('visibility', options.visibility || 'unlisted');
             formData.append('availability', 'free');
             formData.append('file_meta', fileMeta);
-            formData.append('thumb', '4');
+            formData.append('thumb', thumbId);
 
             const formResponse = await axios({
                 method: 'POST',
@@ -211,6 +255,8 @@ class RumbleUploader {
                     'Accept': 'text/html, */*; q=0.01',
                     'Accept-Language': 'en-US,en;q=0.9',
                     'Accept-Encoding': 'gzip, deflate, br',
+                    'Cache-Control': 'no-cache',
+                    'Pragma': 'no-cache',
                     'Origin': 'https://rumble.com',
                     'Referer': 'https://rumble.com/',
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36',
@@ -246,17 +292,17 @@ class RumbleUploader {
 
             if (videoUrl) {
                 console.log(`[Uploader] Success! Video URL: ${videoUrl}`);
-                
+
                 // Extract media ID from the video URL
                 // URL format: https://rumble.com/v5abc12-title.html or embed/v5abc12
                 let mediaId = null;
-                
+
                 // Try to extract from embed URL
                 const embedMatch = videoUrl.match(/embed\/([a-z0-9]+)/i);
                 if (embedMatch) {
                     mediaId = embedMatch[1];
                 }
-                
+
                 // Try to extract from regular URL
                 if (!mediaId) {
                     const urlMatch = videoUrl.match(/rumble\.com\/([a-z0-9]+)-/i);
@@ -264,15 +310,15 @@ class RumbleUploader {
                         mediaId = urlMatch[1];
                     }
                 }
-                
+
                 // Fallback: extract from videoFileId (format: 0-f3p1z3q7bzks0s00skosok8ow.mp4)
                 if (!mediaId) {
                     const fileIdMatch = videoFileId.match(/^\d+-([a-z0-9]+)\.mp4$/);
                     mediaId = fileIdMatch ? fileIdMatch[1] : videoFileId.replace('.mp4', '');
                 }
-                
+
                 console.log(`[Uploader] Extracted media ID: ${mediaId}`);
-                
+
                 // Upload subtitle if provided
                 let subtitleUploaded = false;
                 // if (options.subtitlePath && fs.existsSync(options.subtitlePath)) {
@@ -289,7 +335,7 @@ class RumbleUploader {
                 //         console.warn('[Uploader] Subtitle upload error:', subError.message);
                 //     }
                 // }
-                
+
                 return {
                     success: true,
                     videoId: videoFileId,
@@ -323,19 +369,19 @@ class RumbleUploader {
         try {
             console.log(`[Uploader] Starting subtitle upload for media ID: ${mediaId}`);
             console.log(`[Uploader] Subtitle file: ${subtitlePath}`);
-            
+
             // Step 1: Upload subtitle file to get token
             const fileName = `cc-${Date.now().toString().substring(0, 13)}-${Math.floor(Math.random() * 90000) + 10000}`;
             const formData = new FormData();
             formData.append("filename", fileName);
             formData.append("file", fs.createReadStream(subtitlePath));
             formData.append("language", "en");
-            
+
             // Upload closed captions file
             const uploadUrl = `https://rumble.com/api/Media/UploadClosedCaptions?mid=${encodeURIComponent(mediaId)}&sid=8&filename=${encodeURIComponent(fileName)}&apiKey=31ui4o8sos`;
-            
+
             console.log(`[Uploader] Uploading to: ${uploadUrl}`);
-            
+
             const uploadResponse = await axios({
                 method: "POST",
                 url: uploadUrl,
@@ -348,13 +394,13 @@ class RumbleUploader {
                     "Referer": "https://rumble.com/"
                 }
             });
-            
+
             console.log(`[Uploader] Upload response status: ${uploadResponse.status}`);
             console.log(`[Uploader] Upload response data:`, uploadResponse.data);
-            
+
             let uploadToken = null;
             const uploadData = uploadResponse.data;
-            
+
             // Parse response to get token
             if (uploadData.return && uploadData.return.status === true) {
                 uploadToken = (uploadData.return.message || "uploaded").split(".")[0];
@@ -365,13 +411,13 @@ class RumbleUploader {
             } else if (typeof uploadData === "string") {
                 uploadToken = uploadData.split(".")[0];
             }
-            
+
             if (!uploadToken) {
                 throw new Error(`Failed to get upload token. Response: ${JSON.stringify(uploadData)}`);
             }
-            
+
             console.log(`[Uploader] Subtitle uploaded, token: ${uploadToken}`);
-            
+
             // Step 2: Save subtitle metadata
             const saveFormData = new FormData();
             saveFormData.append("title", videoTitle);
@@ -387,11 +433,11 @@ class RumbleUploader {
             saveFormData.append("tags", "");
             saveFormData.append("description", "");
             saveFormData.append("editThumb", "");
-            
+
             const saveUrl = `https://rumble.com/account/content?a=edit&sid=8&id=${encodeURIComponent(mediaId)}&apiKey=324vec0c3o`;
-            
+
             console.log(`[Uploader] Saving metadata to: ${saveUrl}`);
-            
+
             const saveResponse = await axios({
                 method: "POST",
                 url: saveUrl,
@@ -404,16 +450,16 @@ class RumbleUploader {
                     "Referer": "https://rumble.com/"
                 }
             });
-            
+
             console.log(`[Uploader] Save response status: ${saveResponse.status}`);
-            
+
             if (saveResponse.status === 200) {
                 console.log("[Uploader] Subtitle metadata saved successfully");
                 return { success: true };
             } else {
                 throw new Error(`Save subtitle metadata failed with status ${saveResponse.status}`);
             }
-            
+
         } catch (error) {
             console.error("[Uploader] Subtitle upload error:", error.message);
             if (error.response) {
