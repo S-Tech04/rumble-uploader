@@ -236,7 +236,7 @@ class RumbleUploader {
             formData.append('siteChannelId', options.siteChannelId || '15');
             formData.append('mediaChannelId', '0');
             formData.append('isGamblingRelated', 'false');
-            formData.append('set_default_channel_id', '0');
+            formData.append('set_default_channel_id', '1');
             formData.append('sendPush', '0');
             formData.append('setFeaturedForUser', '0');
             formData.append('setFeaturedForChannel', '0');
@@ -293,48 +293,45 @@ class RumbleUploader {
             if (videoUrl) {
                 console.log(`[Uploader] Success! Video URL: ${videoUrl}`);
 
-                // Extract media ID from the video URL
-                // URL format: https://rumble.com/v5abc12-title.html or embed/v5abc12
-                let mediaId = null;
-
-                // Try to extract from embed URL
-                const embedMatch = videoUrl.match(/embed\/([a-z0-9]+)/i);
-                if (embedMatch) {
-                    mediaId = embedMatch[1];
+                // Extract video slug from the video URL
+                let videoSlug = null;
+                const slugMatch = videoUrl.match(/\/([a-z0-9]+-[^.]+)\.html/i);
+                if (slugMatch) {
+                    videoSlug = slugMatch[1];
                 }
 
-                // Try to extract from regular URL
-                if (!mediaId) {
-                    const urlMatch = videoUrl.match(/rumble\.com\/([a-z0-9]+)-/i);
-                    if (urlMatch) {
-                        mediaId = urlMatch[1];
+                console.log(`[Uploader] Extracted video slug: ${videoSlug}`);
+
+                // Fetch media ID and site ID from content page
+                let mediaId = null;
+                let siteId = null;
+                if (videoSlug) {
+                    try {
+                        const ids = await this.getMediaIdFromContentPage(videoSlug);
+                        mediaId = ids.mediaId;
+                        siteId = ids.siteId;
+                        console.log(`[Uploader] Fetched media ID: ${mediaId}, site ID: ${siteId}`);
+                    } catch (e) {
+                        console.warn('[Uploader] Failed to fetch media ID:', e.message);
                     }
                 }
 
-                // Fallback: extract from videoFileId (format: 0-f3p1z3q7bzks0s00skosok8ow.mp4)
-                if (!mediaId) {
-                    const fileIdMatch = videoFileId.match(/^\d+-([a-z0-9]+)\.mp4$/);
-                    mediaId = fileIdMatch ? fileIdMatch[1] : videoFileId.replace('.mp4', '');
-                }
-
-                console.log(`[Uploader] Extracted media ID: ${mediaId}`);
-
                 // Upload subtitle if provided
                 let subtitleUploaded = false;
-                // if (options.subtitlePath && fs.existsSync(options.subtitlePath)) {
-                //     console.log('[Uploader] Uploading subtitle...');
-                //     try {
-                //         const subResult = await this.uploadSubtitle(mediaId, options.subtitlePath, title);
-                //         if (subResult.success) {
-                //             console.log('[Uploader] Subtitle uploaded successfully');
-                //             subtitleUploaded = true;
-                //         } else {
-                //             console.warn('[Uploader] Subtitle upload failed:', subResult.error);
-                //         }
-                //     } catch (subError) {
-                //         console.warn('[Uploader] Subtitle upload error:', subError.message);
-                //     }
-                // }
+                if (options.subtitlePath && fs.existsSync(options.subtitlePath)) {
+                    console.log('[Uploader] Uploading subtitle...');
+                    try {
+                        const subResult = await this.uploadSubtitle(mediaId, siteId, options.subtitlePath, title);
+                        if (subResult.success) {
+                            console.log('[Uploader] Subtitle uploaded successfully');
+                            subtitleUploaded = true;
+                        } else {
+                            console.warn('[Uploader] Subtitle upload failed:', subResult.error);
+                        }
+                    } catch (subError) {
+                        console.warn('[Uploader] Subtitle upload error:', subError.message);
+                    }
+                }
 
                 return {
                     success: true,
@@ -362,12 +359,53 @@ class RumbleUploader {
     }
 
     /**
-     * Upload subtitle to Rumble video
-     * Based on the process from init.js
+     * Fetch media ID and site ID from content page
      */
-    async uploadSubtitle(mediaId, subtitlePath, videoTitle) {
+    async getMediaIdFromContentPage(videoSlug) {
         try {
-            console.log(`[Uploader] Starting subtitle upload for media ID: ${mediaId}`);
+            const contentPageUrl = 'https://rumble.com/account/content';
+            const response = await axios({
+                method: 'GET',
+                url: contentPageUrl,
+                headers: {
+                    'Cookie': this.cookies,
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36',
+                    'Referer': 'https://rumble.com/',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8'
+                }
+            });
+
+            const html = response.data;
+
+            // Find the video info div that contains the video slug
+            const videoPattern = new RegExp(`<div class="info-video" id="([^"]+)">.*?href="/${videoSlug}\.html"`, 's');
+            const match = html.match(videoPattern);
+
+            if (match) {
+                const infoVideoId = match[1];
+                // ID format: 8_431669692_72tigk_item
+                // Extract: 8 = siteId, 431669692 = mediaId
+                const parts = infoVideoId.split('_');
+                if (parts.length >= 2) {
+                    return {
+                        siteId: parts[0],
+                        mediaId: parts[1]
+                    };
+                }
+            }
+
+            throw new Error(`Could not find media ID for video slug: ${videoSlug}`);
+        } catch (error) {
+            throw new Error(`Failed to fetch media ID: ${error.message}`);
+        }
+    }
+
+    /**
+     * Upload subtitle to Rumble video
+     */
+    async uploadSubtitle(mediaId, siteId, subtitlePath, videoTitle) {
+        try {
+            console.log(`[Uploader] Starting subtitle upload for media ID: ${mediaId}, site ID: ${siteId}`);
             console.log(`[Uploader] Subtitle file: ${subtitlePath}`);
 
             // Step 1: Upload subtitle file to get token
@@ -378,7 +416,7 @@ class RumbleUploader {
             formData.append("language", "en");
 
             // Upload closed captions file
-            const uploadUrl = `https://rumble.com/api/Media/UploadClosedCaptions?mid=${encodeURIComponent(mediaId)}&sid=8&filename=${encodeURIComponent(fileName)}&apiKey=31ui4o8sos`;
+            const uploadUrl = `https://rumble.com/api/Media/UploadClosedCaptions?mid=${encodeURIComponent(mediaId)}&sid=${encodeURIComponent(siteId)}&filename=${encodeURIComponent(fileName)}&apiKey=31ui4o8sos`;
 
             console.log(`[Uploader] Uploading to: ${uploadUrl}`);
 
@@ -434,7 +472,7 @@ class RumbleUploader {
             saveFormData.append("description", "");
             saveFormData.append("editThumb", "");
 
-            const saveUrl = `https://rumble.com/account/content?a=edit&sid=8&id=${encodeURIComponent(mediaId)}&apiKey=324vec0c3o`;
+            const saveUrl = `https://rumble.com/account/content?a=edit&sid=${encodeURIComponent(siteId)}&id=${encodeURIComponent(mediaId)}&apiKey=324vec0c3o`;
 
             console.log(`[Uploader] Saving metadata to: ${saveUrl}`);
 
