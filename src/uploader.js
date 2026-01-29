@@ -233,10 +233,9 @@ class RumbleUploader {
             formData.append('infoExtUser', '');
             formData.append('tags', options.tags || '');
             formData.append('channelId', '0');
-            formData.append('siteChannelId', options.siteChannelId || '15');
+            formData.append('siteChannelId', '15');
             formData.append('mediaChannelId', '0');
             formData.append('isGamblingRelated', 'false');
-            formData.append('set_default_channel_id', '1');
             formData.append('sendPush', '0');
             formData.append('setFeaturedForUser', '0');
             formData.append('setFeaturedForChannel', '0');
@@ -403,9 +402,9 @@ class RumbleUploader {
     /**
      * Upload subtitle to Rumble video
      */
-    async uploadSubtitle(mediaId, siteId, subtitlePath, videoTitle) {
+    async uploadSubtitle(mediaId, subtitlePath, videoTitle) {
         try {
-            console.log(`[Uploader] Starting subtitle upload for media ID: ${mediaId}, site ID: ${siteId}`);
+            console.log(`[Uploader] Starting subtitle upload for media ID: ${mediaId}`);
             console.log(`[Uploader] Subtitle file: ${subtitlePath}`);
 
             // Step 1: Upload subtitle file to get token
