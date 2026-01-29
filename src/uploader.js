@@ -84,7 +84,7 @@ class RumbleUploader {
                     data: buffer,
                     headers: {
                         'Cookie': this.cookies,
-                        'Content-Type': 'application/octet-stream',
+                        // 'Content-Type': 'application/octet-stream',
                         'Cache-Control': 'no-cache',
                         'Pragma': 'no-cache',
                         'Origin': 'https://rumble.com',
@@ -236,7 +236,7 @@ class RumbleUploader {
             formData.append('siteChannelId', options.siteChannelId || '15');
             formData.append('mediaChannelId', '0');
             formData.append('isGamblingRelated', 'false');
-            formData.append('set_default_channel_id', '1');
+            formData.append('set_default_channel_id', '0');
             formData.append('sendPush', '0');
             formData.append('setFeaturedForUser', '0');
             formData.append('setFeaturedForChannel', '0');
