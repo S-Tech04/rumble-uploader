@@ -35,6 +35,41 @@ class RumbleUploader {
     }
 
     /**
+     * Log HTTP request details for debugging
+     */
+    logRequest(method, url, headers, data = null) {
+        console.log(`\n[DEBUG REQUEST] ${method} ${url}`);
+        console.log('[DEBUG REQUEST] Headers:', JSON.stringify(headers, null, 2));
+        if (data) {
+            if (Buffer.isBuffer(data)) {
+                console.log(`[DEBUG REQUEST] Body: <Buffer ${data.length} bytes>`);
+            } else if (typeof data === 'string') {
+                console.log(`[DEBUG REQUEST] Body (${data.length} chars):`, data.substring(0, 500));
+            } else if (data instanceof FormData) {
+                console.log('[DEBUG REQUEST] Body: <FormData>');
+            } else {
+                console.log('[DEBUG REQUEST] Body:', JSON.stringify(data, null, 2));
+            }
+        }
+    }
+
+    /**
+     * Log HTTP response details for debugging
+     */
+    logResponse(method, url, status, headers, data = null) {
+        console.log(`[DEBUG RESPONSE] ${method} ${url} - Status: ${status}`);
+        console.log('[DEBUG RESPONSE] Headers:', JSON.stringify(headers, null, 2));
+        if (data) {
+            if (typeof data === 'string') {
+                console.log(`[DEBUG RESPONSE] Body (${data.length} chars):`, data.substring(0, 500));
+            } else {
+                console.log('[DEBUG RESPONSE] Body:', JSON.stringify(data, null, 2));
+            }
+        }
+        console.log('');
+    }
+
+    /**
      * Upload video to Rumble
      */
     async upload(filePath, title, description, options = {}) {
@@ -78,22 +113,27 @@ class RumbleUploader {
 
                 console.log(`[Uploader] Uploading chunk ${i + 1}/${chunkQty}`);
 
-                await axios({
+                const chunkHeaders = {
+                    'Cookie': this.cookies,
+                    'Cache-Control': 'no-cache',
+                    'Pragma': 'no-cache',
+                    'Origin': 'https://rumble.com',
+                    'Referer': 'https://rumble.com/',
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36'
+                };
+
+                this.logRequest('PUT', chunkUrl, chunkHeaders, buffer);
+
+                const chunkResponse = await axios({
                     method: 'PUT',
                     url: chunkUrl,
                     data: buffer,
-                    headers: {
-                        'Cookie': this.cookies,
-                        // 'Content-Type': 'application/octet-stream',
-                        'Cache-Control': 'no-cache',
-                        'Pragma': 'no-cache',
-                        'Origin': 'https://rumble.com',
-                        'Referer': 'https://rumble.com/',
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36'
-                    },
+                    headers: chunkHeaders,
                     maxBodyLength: Infinity,
                     maxContentLength: Infinity
                 });
+
+                this.logResponse('PUT', chunkUrl, chunkResponse.status, chunkResponse.headers, chunkResponse.data);
 
                 this.reportProgress('chunk_uploaded', {
                     chunk: i + 1,
@@ -109,18 +149,24 @@ class RumbleUploader {
             console.log('[Uploader] Merging chunks...');
             const mergeUrl = `${RUMBLE_UPLOAD_HOST}/upload.php?merge=${chunkQty - 1}&chunk=${uploadFileName}&chunkSz=${CHUNK_SIZE}&chunkQty=${chunkQty}&api=${API_VERSION}`;
 
+            const mergeHeaders = {
+                'Cookie': this.cookies,
+                'Cache-Control': 'no-cache',
+                'Pragma': 'no-cache',
+                'Origin': 'https://rumble.com',
+                'Referer': 'https://rumble.com/',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36'
+            };
+
+            this.logRequest('POST', mergeUrl, mergeHeaders);
+
             const mergeResponse = await axios({
                 method: 'POST',
                 url: mergeUrl,
-                headers: {
-                    'Cookie': this.cookies,
-                    'Cache-Control': 'no-cache',
-                    'Pragma': 'no-cache',
-                    'Origin': 'https://rumble.com',
-                    'Referer': 'https://rumble.com/',
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36'
-                }
+                headers: mergeHeaders
             });
+
+            this.logResponse('POST', mergeUrl, mergeResponse.status, mergeResponse.headers, mergeResponse.data);
 
             // Response is the video file ID like "0-f3p1z3q7bzks0s00skosok8ow.mp4"
             const videoFileId = mergeResponse.data.trim();
@@ -134,18 +180,24 @@ class RumbleUploader {
             console.log('[Uploader] Getting duration...');
             const durationUrl = `${RUMBLE_UPLOAD_HOST}/upload.php?duration=${videoFileId}&api=${API_VERSION}`;
 
+            const durationHeaders = {
+                'Cookie': this.cookies,
+                'Cache-Control': 'no-cache',
+                'Pragma': 'no-cache',
+                'Origin': 'https://rumble.com',
+                'Referer': 'https://rumble.com/',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36'
+            };
+
+            this.logRequest('GET', durationUrl, durationHeaders);
+
             const durationResponse = await axios({
                 method: 'GET',
                 url: durationUrl,
-                headers: {
-                    'Cookie': this.cookies,
-                    'Cache-Control': 'no-cache',
-                    'Pragma': 'no-cache',
-                    'Origin': 'https://rumble.com',
-                    'Referer': 'https://rumble.com/',
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36'
-                }
+                headers: durationHeaders
             });
+
+            this.logResponse('GET', durationUrl, durationResponse.status, durationResponse.headers, durationResponse.data);
 
             const duration = parseFloat(durationResponse.data) || 0;
             console.log(`[Uploader] Duration: ${duration}s`);
@@ -155,18 +207,24 @@ class RumbleUploader {
             let thumbId = '4'; // Default fallback
             try {
                 const thumbnailsUrl = `${RUMBLE_UPLOAD_HOST}/upload.php?thumbnails=${videoFileId}&api=${API_VERSION}`;
+                const thumbnailsHeaders = {
+                    'Cookie': this.cookies,
+                    'Cache-Control': 'no-cache',
+                    'Pragma': 'no-cache',
+                    'Origin': 'https://rumble.com',
+                    'Referer': 'https://rumble.com/',
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36'
+                };
+
+                this.logRequest('GET', thumbnailsUrl, thumbnailsHeaders);
+
                 const thumbnailsResponse = await axios({
                     method: 'GET',
                     url: thumbnailsUrl,
-                    headers: {
-                        'Cookie': this.cookies,
-                        'Cache-Control': 'no-cache',
-                        'Pragma': 'no-cache',
-                        'Origin': 'https://rumble.com',
-                        'Referer': 'https://rumble.com/',
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36'
-                    }
+                    headers: thumbnailsHeaders
                 });
+
+                this.logResponse('GET', thumbnailsUrl, thumbnailsResponse.status, thumbnailsResponse.headers, thumbnailsResponse.data);
 
                 // Parse thumbnail response to get the thumb ID
                 // Response can be JSON with thumbnail IDs or HTML
@@ -244,30 +302,37 @@ class RumbleUploader {
             formData.append('file_meta', fileMeta);
             formData.append('thumb', thumbId);
 
+            const formHeaders = {
+                'Cookie': this.cookies,
+                'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                'Accept': 'text/html, */*; q=0.01',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'Cache-Control': 'no-cache',
+                'Pragma': 'no-cache',
+                'Origin': 'https://rumble.com',
+                'Referer': 'https://rumble.com/',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36',
+                'Sec-CH-UA': '"Not(A:Brand";v="8", "Chromium";v="144", "Google Chrome";v="144"',
+                'Sec-CH-UA-Mobile': '?0',
+                'Sec-CH-UA-Platform': '"Windows"',
+                'Sec-Fetch-Dest': 'empty',
+                'Sec-Fetch-Mode': 'cors',
+                'Sec-Fetch-Site': 'same-site',
+                'Priority': 'u=1, i'
+            };
+
+            const formDataString = formData.toString();
+            this.logRequest('POST', formUrl, formHeaders, formDataString);
+
             const formResponse = await axios({
                 method: 'POST',
                 url: formUrl,
-                data: formData.toString(),
-                headers: {
-                    'Cookie': this.cookies,
-                    'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-                    'Accept': 'text/html, */*; q=0.01',
-                    'Accept-Language': 'en-US,en;q=0.9',
-                    'Accept-Encoding': 'gzip, deflate, br',
-                    'Cache-Control': 'no-cache',
-                    'Pragma': 'no-cache',
-                    'Origin': 'https://rumble.com',
-                    'Referer': 'https://rumble.com/',
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36',
-                    'Sec-CH-UA': '"Not(A:Brand";v="8", "Chromium";v="144", "Google Chrome";v="144"',
-                    'Sec-CH-UA-Mobile': '?0',
-                    'Sec-CH-UA-Platform': '"Windows"',
-                    'Sec-Fetch-Dest': 'empty',
-                    'Sec-Fetch-Mode': 'cors',
-                    'Sec-Fetch-Site': 'same-site',
-                    'Priority': 'u=1, i'
-                }
+                data: formDataString,
+                headers: formHeaders
             });
+
+            this.logResponse('POST', formUrl, formResponse.status, formResponse.headers, formResponse.data);
 
             const responseHtml = formResponse.data;
             console.log('[Uploader] Form submitted, parsing response...');
@@ -363,16 +428,22 @@ class RumbleUploader {
     async getMediaIdFromContentPage(videoSlug) {
         try {
             const contentPageUrl = 'https://rumble.com/account/content';
+            const contentHeaders = {
+                'Cookie': this.cookies,
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36',
+                'Referer': 'https://rumble.com/',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8'
+            };
+
+            this.logRequest('GET', contentPageUrl, contentHeaders);
+
             const response = await axios({
                 method: 'GET',
                 url: contentPageUrl,
-                headers: {
-                    'Cookie': this.cookies,
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36',
-                    'Referer': 'https://rumble.com/',
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8'
-                }
+                headers: contentHeaders
             });
+
+            this.logResponse('GET', contentPageUrl, response.status, response.headers, response.data);
 
             const html = response.data;
 
@@ -402,7 +473,7 @@ class RumbleUploader {
     /**
      * Upload subtitle to Rumble video
      */
-    async uploadSubtitle(mediaId, subtitlePath, videoTitle) {
+    async uploadSubtitle(mediaId, siteId, subtitlePath, videoTitle) {
         try {
             console.log(`[Uploader] Starting subtitle upload for media ID: ${mediaId}`);
             console.log(`[Uploader] Subtitle file: ${subtitlePath}`);
@@ -419,18 +490,24 @@ class RumbleUploader {
 
             console.log(`[Uploader] Uploading to: ${uploadUrl}`);
 
+            const uploadHeaders = {
+                ...formData.getHeaders(),
+                "Cookie": this.cookies,
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                "Origin": "https://rumble.com",
+                "Referer": "https://rumble.com/"
+            };
+
+            this.logRequest('POST', uploadUrl, uploadHeaders, formData);
+
             const uploadResponse = await axios({
                 method: "POST",
                 url: uploadUrl,
                 data: formData,
-                headers: {
-                    ...formData.getHeaders(),
-                    "Cookie": this.cookies,
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                    "Origin": "https://rumble.com",
-                    "Referer": "https://rumble.com/"
-                }
+                headers: uploadHeaders
             });
+
+            this.logResponse('POST', uploadUrl, uploadResponse.status, uploadResponse.headers, uploadResponse.data);
 
             console.log(`[Uploader] Upload response status: ${uploadResponse.status}`);
             console.log(`[Uploader] Upload response data:`, uploadResponse.data);
@@ -475,18 +552,24 @@ class RumbleUploader {
 
             console.log(`[Uploader] Saving metadata to: ${saveUrl}`);
 
+            const saveHeaders = {
+                ...saveFormData.getHeaders(),
+                "Cookie": this.cookies,
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                "Origin": "https://rumble.com",
+                "Referer": "https://rumble.com/"
+            };
+
+            this.logRequest('POST', saveUrl, saveHeaders, saveFormData);
+
             const saveResponse = await axios({
                 method: "POST",
                 url: saveUrl,
                 data: saveFormData,
-                headers: {
-                    ...saveFormData.getHeaders(),
-                    "Cookie": this.cookies,
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                    "Origin": "https://rumble.com",
-                    "Referer": "https://rumble.com/"
-                }
+                headers: saveHeaders
             });
+
+            this.logResponse('POST', saveUrl, saveResponse.status, saveResponse.headers, saveResponse.data);
 
             console.log(`[Uploader] Save response status: ${saveResponse.status}`);
 
