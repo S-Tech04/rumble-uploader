@@ -44,7 +44,8 @@ class RumbleUploader {
             if (Buffer.isBuffer(data)) {
                 console.log(`[DEBUG REQUEST] Body: <Buffer ${data.length} bytes>`);
             } else if (typeof data === 'string') {
-                console.log(`[DEBUG REQUEST] Body (${data.length} chars):`, data.substring(0, 500));
+                console.log(`[DEBUG REQUEST] Body (${data.length} chars - FULL):`);
+                console.log(data);
             } else if (data instanceof FormData) {
                 console.log('[DEBUG REQUEST] Body: <FormData>');
             } else {
@@ -61,7 +62,8 @@ class RumbleUploader {
         console.log('[DEBUG RESPONSE] Headers:', JSON.stringify(headers, null, 2));
         if (data) {
             if (typeof data === 'string') {
-                console.log(`[DEBUG RESPONSE] Body (${data.length} chars):`, data.substring(0, 500));
+                console.log(`[DEBUG RESPONSE] Body (${data.length} chars - FULL):`);
+                console.log(data);
             } else {
                 console.log('[DEBUG RESPONSE] Body:', JSON.stringify(data, null, 2));
             }
@@ -290,10 +292,11 @@ class RumbleUploader {
             formData.append('infoWhere', '');
             formData.append('infoExtUser', '');
             formData.append('tags', options.tags || '');
-            formData.append('channelId', '0');
+            formData.append('channelId', 'undefined');
             formData.append('siteChannelId', '15');
             formData.append('mediaChannelId', '0');
             formData.append('isGamblingRelated', 'false');
+            formData.append('set_default_channel_id', '0');
             formData.append('sendPush', '0');
             formData.append('setFeaturedForUser', '0');
             formData.append('setFeaturedForChannel', '0');
