@@ -218,15 +218,11 @@ class RumbleUploader {
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36'
                 };
 
-                this.logRequest('GET', thumbnailsUrl, thumbnailsHeaders);
-
                 const thumbnailsResponse = await axios({
                     method: 'GET',
                     url: thumbnailsUrl,
                     headers: thumbnailsHeaders
                 });
-
-                this.logResponse('GET', thumbnailsUrl, thumbnailsResponse.status, thumbnailsResponse.headers, thumbnailsResponse.data);
 
                 // Parse thumbnail response to get the thumb ID
                 // Response can be JSON with thumbnail IDs or HTML
@@ -430,23 +426,13 @@ class RumbleUploader {
      */
     async getMediaIdFromContentPage(videoSlug) {
         try {
-            const contentPageUrl = 'https://rumble.com/account/content';
-            const contentHeaders = {
-                'Cookie': this.cookies,
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36',
-                'Referer': 'https://rumble.com/',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8'
-            };
-
-            this.logRequest('GET', contentPageUrl, contentHeaders);
+            const contentPageUrl = 'https://rumble.com/account/content'
 
             const response = await axios({
                 method: 'GET',
                 url: contentPageUrl,
                 headers: contentHeaders
             });
-
-            this.logResponse('GET', contentPageUrl, response.status, response.headers, response.data);
 
             const html = response.data;
 
