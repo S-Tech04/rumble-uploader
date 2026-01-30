@@ -124,8 +124,6 @@ class RumbleUploader {
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36'
                 };
 
-                this.logRequest('PUT', chunkUrl, chunkHeaders, buffer);
-
                 const chunkResponse = await axios({
                     method: 'PUT',
                     url: chunkUrl,
@@ -134,8 +132,6 @@ class RumbleUploader {
                     maxBodyLength: Infinity,
                     maxContentLength: Infinity
                 });
-
-                this.logResponse('PUT', chunkUrl, chunkResponse.status, chunkResponse.headers, chunkResponse.data);
 
                 this.reportProgress('chunk_uploaded', {
                     chunk: i + 1,
@@ -160,15 +156,11 @@ class RumbleUploader {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36'
             };
 
-            this.logRequest('POST', mergeUrl, mergeHeaders);
-
             const mergeResponse = await axios({
                 method: 'POST',
                 url: mergeUrl,
                 headers: mergeHeaders
             });
-
-            this.logResponse('POST', mergeUrl, mergeResponse.status, mergeResponse.headers, mergeResponse.data);
 
             // Response is the video file ID like "0-f3p1z3q7bzks0s00skosok8ow.mp4"
             const videoFileId = mergeResponse.data.trim();
@@ -191,15 +183,11 @@ class RumbleUploader {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36'
             };
 
-            this.logRequest('GET', durationUrl, durationHeaders);
-
             const durationResponse = await axios({
                 method: 'GET',
                 url: durationUrl,
                 headers: durationHeaders
             });
-
-            this.logResponse('GET', durationUrl, durationResponse.status, durationResponse.headers, durationResponse.data);
 
             const duration = parseFloat(durationResponse.data) || 0;
             console.log(`[Uploader] Duration: ${duration}s`);
@@ -278,7 +266,7 @@ class RumbleUploader {
             formData.append('title', title);
             formData.append('description', description || '');
             formData.append('video[]', videoFileId);
-            formData.append('featured', '0');
+            formData.append('featured', 'undefined');
             formData.append('rights', '1');
             formData.append('terms', '1');
             formData.append('facebookUpload', '');
@@ -322,7 +310,6 @@ class RumbleUploader {
             };
 
             const formDataString = formData.toString();
-            this.logRequest('POST', formUrl, formHeaders, formDataString);
 
             const formResponse = await axios({
                 method: 'POST',
@@ -330,8 +317,6 @@ class RumbleUploader {
                 data: formDataString,
                 headers: formHeaders
             });
-
-            this.logResponse('POST', formUrl, formResponse.status, formResponse.headers, formResponse.data);
 
             const responseHtml = formResponse.data;
             console.log('[Uploader] Form submitted, parsing response...');
@@ -487,16 +472,12 @@ class RumbleUploader {
                 "Referer": "https://rumble.com/"
             };
 
-            this.logRequest('POST', uploadUrl, uploadHeaders, formData);
-
             const uploadResponse = await axios({
                 method: "POST",
                 url: uploadUrl,
                 data: formData,
                 headers: uploadHeaders
             });
-
-            this.logResponse('POST', uploadUrl, uploadResponse.status, uploadResponse.headers, uploadResponse.data);
 
             console.log(`[Uploader] Upload response status: ${uploadResponse.status}`);
             console.log(`[Uploader] Upload response data:`, uploadResponse.data);
@@ -549,16 +530,12 @@ class RumbleUploader {
                 "Referer": "https://rumble.com/"
             };
 
-            this.logRequest('POST', saveUrl, saveHeaders, saveFormData);
-
             const saveResponse = await axios({
                 method: "POST",
                 url: saveUrl,
                 data: saveFormData,
                 headers: saveHeaders
             });
-
-            this.logResponse('POST', saveUrl, saveResponse.status, saveResponse.headers, saveResponse.data);
 
             console.log(`[Uploader] Save response status: ${saveResponse.status}`);
 
