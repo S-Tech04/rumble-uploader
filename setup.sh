@@ -142,6 +142,49 @@ else
     echo -e "${YELLOW}Warning: Chrome not found. You may need to install it manually.${NC}"
 fi
 
+# Install FFmpeg for video processing
+echo ""
+echo -e "${YELLOW}Installing FFmpeg for video processing...${NC}"
+if command -v ffmpeg &> /dev/null; then
+    echo -e "${GREEN}FFmpeg is already installed${NC}"
+    ffmpeg -version | head -n 1
+else
+    if [ -f /etc/debian_version ]; then
+        # Debian/Ubuntu
+        sudo apt-get install -y ffmpeg
+    elif [ -f /etc/redhat-release ]; then
+        # RHEL/CentOS/Fedora
+        # Enable EPEL repository for CentOS/RHEL
+        if command -v yum &> /dev/null; then
+            sudo yum install -y epel-release 2>/dev/null || true
+            sudo yum install -y ffmpeg
+        else
+            sudo dnf install -y ffmpeg
+        fi
+    else
+        echo -e "${YELLOW}Could not detect OS. Attempting to install FFmpeg...${NC}"
+        if command -v apt-get &> /dev/null; then
+            sudo apt-get install -y ffmpeg
+        elif command -v yum &> /dev/null; then
+            sudo yum install -y ffmpeg
+        elif command -v dnf &> /dev/null; then
+            sudo dnf install -y ffmpeg
+        else
+            echo -e "${RED}Could not install FFmpeg automatically.${NC}"
+            echo -e "${RED}Please install FFmpeg manually: https://ffmpeg.org/download.html${NC}"
+            exit 1
+        fi
+    fi
+    
+    if command -v ffmpeg &> /dev/null; then
+        echo -e "${GREEN}FFmpeg installed successfully${NC}"
+        ffmpeg -version | head -n 1
+    else
+        echo -e "${RED}FFmpeg installation failed. Please install it manually.${NC}"
+        exit 1
+    fi
+fi
+
 # Install PM2 globally if not already installed
 echo -e "${YELLOW}Checking PM2 installation...${NC}"
 if ! command -v pm2 &> /dev/null; then

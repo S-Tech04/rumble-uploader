@@ -111,6 +111,38 @@ if ([string]::IsNullOrEmpty($CHROME_PATH)) {
     Write-Host ""
 }
 
+# Check for FFmpeg installation
+Write-Host ""
+Write-Host "Checking FFmpeg installation for video processing..." -ForegroundColor Yellow
+try {
+    $ffmpegVersion = ffmpeg -version 2>$null | Select-Object -First 1
+    Write-Host "FFmpeg is already installed" -ForegroundColor Green
+    Write-Host $ffmpegVersion -ForegroundColor Gray
+} catch {
+    Write-Host "FFmpeg not found. FFmpeg is required for video processing." -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "Please install FFmpeg manually:" -ForegroundColor Yellow
+    Write-Host "1. Download from: https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip" -ForegroundColor Cyan
+    Write-Host "2. Extract to C:\ffmpeg" -ForegroundColor Cyan
+    Write-Host "3. Add C:\ffmpeg\bin to your System PATH" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "Or use Chocolatey (if installed): choco install ffmpeg" -ForegroundColor Cyan
+    Write-Host ""
+    $response = Read-Host "Do you want to open the FFmpeg download page? (Y/N)"
+    if ($response -eq "Y" -or $response -eq "y") {
+        Start-Process "https://www.gyan.dev/ffmpeg/builds/"
+    }
+    Write-Host ""
+    Write-Host "WARNING: Application will not work properly without FFmpeg!" -ForegroundColor Red
+    Write-Host "You can install FFmpeg later and restart the application." -ForegroundColor Yellow
+    Write-Host ""
+    $response = Read-Host "Do you want to continue without FFmpeg? (Y/N)"
+    if ($response -ne "Y" -and $response -ne "y") {
+        Write-Host "Setup cancelled. Please install FFmpeg and run setup again." -ForegroundColor Red
+        exit 1
+    }
+}
+
 # Prompt for configuration
 Write-Host ""
 Write-Host "Configuration Setup" -ForegroundColor Yellow
