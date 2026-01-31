@@ -2,6 +2,7 @@ import { useState } from "react";
 import { LogOut, Play, Link2, Info, Loader2, List } from "lucide-react";
 import PipelineList from "./PipelineList";
 import EpisodePreview from "./EpisodePreview";
+import { logout } from "../lib/auth";
 
 interface MainAppProps {
   token: string;
@@ -20,6 +21,11 @@ const MainApp = ({ token, onLogout }: MainAppProps) => {
   const [episodeRangeEnd, setEpisodeRangeEnd] = useState("");
   const [bulkUrls, setBulkUrls] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+
+  const handleLogout = async () => {
+    await logout();
+    onLogout();
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -121,7 +127,7 @@ const MainApp = ({ token, onLogout }: MainAppProps) => {
               <p className="text-muted-foreground text-xs">Upload to Rumble</p>
             </div>
           </div>
-          <button onClick={onLogout} className="btn-ghost flex items-center gap-1.5 text-xs">
+          <button onClick={handleLogout} className="btn-ghost flex items-center gap-1.5 text-xs">
             <LogOut className="w-3.5 h-3.5" />
             Logout
           </button>

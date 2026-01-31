@@ -25,8 +25,9 @@ const LoginScreen = ({ onLogin }: LoginScreenProps) => {
       const data = await response.json();
 
       if (data.success) {
-        localStorage.setItem("authToken", data.token);
-        onLogin(data.token);
+        localStorage.setItem("authToken", data.accessToken);
+        localStorage.setItem("refreshToken", data.refreshToken);
+        onLogin(data.accessToken);
       } else {
         setError(data.error || "Login failed");
       }
