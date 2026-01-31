@@ -134,22 +134,41 @@ Set-Location frontend
 npm install
 Set-Location ..
 
-# Build frontend
-Write-Host "Building frontend..." -ForegroundColor Yellow
-Set-Location frontend
-npm run build
-Set-Location ..
-
 # Create necessary directories
 Write-Host "Creating necessary directories..." -ForegroundColor Yellow
 New-Item -ItemType Directory -Force -Path "temp" | Out-Null
 New-Item -ItemType Directory -Force -Path "downloaded" | Out-Null
 New-Item -ItemType Directory -Force -Path "public" | Out-Null
 
-# Copy built frontend to public
-Write-Host "Copying frontend build to public directory..." -ForegroundColor Yellow
-Remove-Item -Path "public\*" -Recurse -Force -ErrorAction SilentlyContinue
-Copy-Item -Path "frontend\dist\*" -Destination "public\" -Recurse -Force
+# Build frontend (Vite builds directly to ../public)
+Write-Host "Building frontend..." -ForegroundColor Yellow
+Set-Location frontend
+try {
+    npm run build
+    if ($LASTEXITCODE -ne 0) {
+        throw "Build failed with exit code $LASTEXITCODE"
+    }
+    Write-Host "Frontend built successfully" -ForegroundColor Green
+} catch {
+    Write-Host "Frontend build failed: $_" -ForegroundColor Red
+    Set-Location ..
+    exit 1
+}
+Set-Location ..
+
+# Verify build output
+if (Test-Path "public" -PathType Container) {
+    $publicFiles = Get-ChildItem -Path "public" -ErrorAction SilentlyContinue
+    if ($publicFiles) {
+        Write-Host "Frontend build verified in public directory" -ForegroundColor Green
+    } else {
+        Write-Host "Error: Build output not found in public directory" -ForegroundColor Red
+        exit 1
+    }
+} else {
+    Write-Host "Error: public directory does not exist after build" -ForegroundColor Red
+    exit 1
+}
 
 # Stop existing PM2 processes if any
 Write-Host "Stopping existing PM2 processes..." -ForegroundColor Yellow

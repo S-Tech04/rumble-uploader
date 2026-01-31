@@ -119,22 +119,31 @@ cd frontend
 npm install
 cd ..
 
-# Build frontend
-echo -e "${YELLOW}Building frontend...${NC}"
-cd frontend
-npm run build
-cd ..
-
 # Create necessary directories
 echo -e "${YELLOW}Creating necessary directories...${NC}"
 mkdir -p temp
 mkdir -p downloaded
 mkdir -p public
 
-# Copy built frontend to public
-echo -e "${YELLOW}Copying frontend build to public directory...${NC}"
-rm -rf public/*
-cp -r frontend/dist/* public/
+# Build frontend (Vite builds directly to ../public)
+echo -e "${YELLOW}Building frontend...${NC}"
+cd frontend
+if npm run build; then
+    echo -e "${GREEN}Frontend built successfully${NC}"
+else
+    echo -e "${RED}Frontend build failed${NC}"
+    cd ..
+    exit 1
+fi
+cd ..
+
+# Verify build output
+if [ -d "public" ] && [ "$(ls -A public 2>/dev/null)" ]; then
+    echo -e "${GREEN}Frontend build verified in public directory${NC}"
+else
+    echo -e "${RED}Error: Build output not found in public directory${NC}"
+    exit 1
+fi
 
 # Stop existing PM2 processes if any
 echo -e "${YELLOW}Stopping existing PM2 processes...${NC}"
