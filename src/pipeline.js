@@ -252,6 +252,31 @@ class Pipeline {
     }
 
     /**
+     * Fetch anime info (title, japanese_title, etc.)
+     */
+    static async fetchAnimeInfo(animeId) {
+        try {
+            const infoUrl = `${API_BASE}/info?id=${animeId}`;
+            console.log(`[Pipeline] Fetching anime info from: ${infoUrl}`);
+
+            const response = await axios.get(infoUrl, { timeout: 10000 });
+
+            if (response.data.success && response.data.results && response.data.results.data) {
+                const animeData = response.data.results.data;
+                console.log(`[Pipeline] Anime info fetched: ${animeData.title} (${animeData.japanese_title})`);
+                return {
+                    title: animeData.title,
+                    japaneseTitle: animeData.japanese_title
+                };
+            }
+            return null;
+        } catch (error) {
+            console.error(`[Pipeline] Error fetching anime info: ${error.message}`);
+            return null;
+        }
+    }
+
+    /**
      * Download subtitle file
      */
     static async downloadSubtitle(url, outputPath) {
@@ -386,17 +411,51 @@ class Pipeline {
                 const animeSlugMatch = videoUrl.match(/\/watch\/([^\/?]+)/);
                 const animeSlug = animeSlugMatch ? animeSlugMatch[1] : null;
 
-                // Get episode number from episodes API
+                // Get episode number and apply title format or template
                 if (animeSlug) {
                     const fullEpisodeId = `${animeSlug}?ep=${episodeId}`;
                     const episodeInfo = await this.fetchEpisodeNumber(animeSlug, fullEpisodeId);
+                    
                     if (episodeInfo) {
-                        title = title || `${extractResult.title} Episode ${episodeInfo.episodeNumber}`;
-                    } else {
-                        title = title || extractResult.title;
+                        // Check if custom title has template strings
+                        if (title && (title.includes("{jp}") || title.includes("{en}") || title.includes("{ep_no}"))) {
+                            const animeInfo = await this.fetchAnimeInfo(animeSlug);
+                            
+                            if (animeInfo) {
+                                title = title
+                                    .replace(/\{jp\}/g, animeInfo.japaneseTitle || "")
+                                    .replace(/\{en\}/g, animeInfo.title || "")
+                                    .replace(/\{ep_no\}/g, episodeInfo.episodeNumber);
+                            } else {
+                                title = title.replace(/\{ep_no\}/g, episodeInfo.episodeNumber);
+                            }
+                        } else if (!title) {
+                            // No custom title, use title format
+                            const titleFormat = options.titleFormat || "default";
+                            
+                            if (titleFormat === "japanese" || titleFormat === "english") {
+                                const animeInfo = await this.fetchAnimeInfo(animeSlug);
+                                
+                                if (animeInfo) {
+                                    if (titleFormat === "japanese" && animeInfo.japaneseTitle) {
+                                        title = `${animeInfo.japaneseTitle} Episode ${episodeInfo.episodeNumber}`;
+                                    } else if (titleFormat === "english" && animeInfo.title) {
+                                        title = `${animeInfo.title} Episode ${episodeInfo.episodeNumber}`;
+                                    } else {
+                                        title = `${extractResult.title} Episode ${episodeInfo.episodeNumber}`;
+                                    }
+                                } else {
+                                    title = `${extractResult.title} Episode ${episodeInfo.episodeNumber}`;
+                                }
+                            } else {
+                                title = `${extractResult.title} Episode ${episodeInfo.episodeNumber}`;
+                            }
+                        }
+                    } else if (!title) {
+                        title = extractResult.title;
                     }
-                } else {
-                    title = title || extractResult.title;
+                } else if (!title) {
+                    title = extractResult.title;
                 }
 
                 // Get English subtitle if available

@@ -263,6 +263,8 @@ class HLSDownloader {
     async downloadSegments(segments, tempDir) {
         const segmentFiles = [];
         const total = segments.length;
+        let failedCount = 0;
+        const maxFailures = Math.ceil(total * 0.1);
 
         for (let i = 0; i < segments.length; i += this.maxParallel) {
             const batch = segments.slice(i, i + this.maxParallel);
@@ -290,7 +292,12 @@ class HLSDownloader {
 
                     segmentFiles[absoluteIdx] = segPath;
                 } catch (e) {
-                    console.error(`Failed segment ${absoluteIdx}: ${e.message}`);
+                    failedCount++;
+                    console.error(`[Downloader] Failed segment ${absoluteIdx}: ${e.message}`);
+                    
+                    if (failedCount > maxFailures) {
+                        throw new Error(`Too many failed segments: ${failedCount}/${total}. Download stopped.`);
+                    }
                 }
             });
 
@@ -298,27 +305,55 @@ class HLSDownloader {
 
             const downloaded = Math.min(i + batch.length, total);
             const percent = Math.round((downloaded / total) * 100);
-            this.reportProgress('downloading', { downloaded, total, percent });
+            this.reportProgress('downloading', { downloaded, total, percent, failed: failedCount });
         }
 
-        return segmentFiles.filter(f => f);
+        const successfulSegments = segmentFiles.filter(f => f);
+        
+        if (successfulSegments.length === 0) {
+            throw new Error('All segments failed to download');
+        }
+        
+        if (failedCount > 0) {
+            console.log(`[Downloader] Warning: ${failedCount} segments failed, but continuing with ${successfulSegments.length} successful segments`);
+        }
+
+        return successfulSegments;
     }
 
     /**
      * Concatenate segment files
      */
     async concatenateSegments(segmentFiles, outputPath) {
-        const outputStream = fs.createWriteStream(outputPath);
-
-        for (const file of segmentFiles) {
-            if (file && fs.existsSync(file)) {
-                const data = fs.readFileSync(file);
-                outputStream.write(data);
-            }
+        const outputDir = path.dirname(outputPath);
+        
+        if (!fs.existsSync(outputDir)) {
+            console.log(`[Downloader] Output directory missing, recreating: ${outputDir}`);
+            fs.mkdirSync(outputDir, { recursive: true });
         }
 
-        outputStream.end();
-        await new Promise(r => outputStream.on('finish', r));
+        return new Promise((resolve, reject) => {
+            const outputStream = fs.createWriteStream(outputPath);
+
+            outputStream.on('error', (err) => {
+                console.error(`[Downloader] Write stream error:`, err);
+                reject(err);
+            });
+
+            outputStream.on('finish', () => {
+                console.log(`[Downloader] Concatenation complete: ${outputPath}`);
+                resolve();
+            });
+
+            for (const file of segmentFiles) {
+                if (file && fs.existsSync(file)) {
+                    const data = fs.readFileSync(file);
+                    outputStream.write(data);
+                }
+            }
+
+            outputStream.end();
+        });
     }
 
     /**

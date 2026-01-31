@@ -3,6 +3,26 @@ const Pipeline = require("../pipeline");
 
 const API_BASE = process.env.API_BASE || "https://anime-api-itzzzme.vercel.app/api";
 
+exports.searchAnime = async (req, res) => {
+    try {
+        const { keyword } = req.query;
+        
+        if (!keyword) {
+            return res.status(400).json({ success: false, error: "Missing keyword parameter" });
+        }
+
+        const apiUrl = `${API_BASE}/search?keyword=${encodeURIComponent(keyword)}`;
+        
+        const response = await axios.get(apiUrl);
+        const data = response.data;
+
+        res.json(data);
+
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
 exports.getEpisodes = async (req, res) => {
     try {
         const { animeId } = req.params;
@@ -27,7 +47,7 @@ exports.getEpisodes = async (req, res) => {
 
 exports.startBulkEpisodes = async (req, res) => {
     try {
-        const { animeId, cookies, videoType, title, episodeRange } = req.body;
+        const { animeId, cookies, videoType, title, titleFormat, episodeRange } = req.body;
 
         if (!animeId) {
             return res.status(400).json({ success: false, error: "Missing animeId" });
@@ -61,14 +81,46 @@ exports.startBulkEpisodes = async (req, res) => {
             });
         }
 
+        const animeInfoUrl = `${API_BASE}/info?id=${animeId}`;
+        let animeInfo = null;
+        
+        try {
+            const infoResponse = await axios.get(animeInfoUrl);
+            if (infoResponse.data.success && infoResponse.data.results && infoResponse.data.results.data) {
+                animeInfo = infoResponse.data.results.data;
+                console.log(`[EpisodeController] Anime info fetched: ${animeInfo.title} (${animeInfo.japanese_title})`);
+            }
+        } catch (error) {
+            console.error(`[EpisodeController] Failed to fetch anime info: ${error.message}`);
+        }
+
         const results = [];
         
         for (const episode of episodes) {
             const episodeUrl = `https://9animetv.to/watch/${episode.id}`;
             
             try {
+                let episodeTitle = title;
+                
+                if (episodeTitle && animeInfo) {
+                    episodeTitle = episodeTitle
+                        .replace(/\{jp\}/g, animeInfo.japanese_title || "")
+                        .replace(/\{en\}/g, animeInfo.title || "")
+                        .replace(/\{ep_no\}/g, episode.episode_no);
+                } else if (!episodeTitle && animeInfo) {
+                    if (titleFormat === "japanese" && animeInfo.japanese_title) {
+                        episodeTitle = `${animeInfo.japanese_title} Episode ${episode.episode_no}`;
+                    } else if (titleFormat === "english" && animeInfo.title) {
+                        episodeTitle = `${animeInfo.title} Episode ${episode.episode_no}`;
+                    } else {
+                        episodeTitle = episode.title;
+                    }
+                } else if (!episodeTitle) {
+                    episodeTitle = episode.title;
+                }
+                
                 const result = await Pipeline.start(episodeUrl, cookies || "", {
-                    title: title || episode.title,
+                    title: episodeTitle,
                     linkType: "anime",
                     videoType: videoType || "sub"
                 });

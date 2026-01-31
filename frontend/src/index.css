@@ -103,6 +103,30 @@
       linear-gradient(90deg, hsl(var(--grid-color) / 0.5) 1px, transparent 1px);
     background-size: 24px 24px;
   }
+
+  /* Custom Scrollbar */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #21242c;
+    border-radius: 4px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #2a2d36;
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #21242c transparent;
+  }
 }
 
 @layer components {
@@ -159,5 +183,16 @@
   @keyframes pulse-soft {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.7; }
+  }
+
+  @keyframes slideIn {
+    from {
+      transform: translateX(100%);
+      opacity: 0;
+    }
+    to {
+      transform: translateX(0);
+      opacity: 1;
+    }
   }
 }

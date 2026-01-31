@@ -138,8 +138,6 @@ CHROME_PATH=/usr/bin/google-chrome-stable
 # Server Port (optional, defaults to 3000)
 PORT=3000
 
-# Polling Interval for frontend (milliseconds)
-POLL_INTERVAL=3000
 ```
 
 **Important Security Notes:**
@@ -433,8 +431,6 @@ CHROME_PATH=/usr/bin/google-chrome-stable
 # Server Port
 PORT=3000
 
-# Polling Interval
-POLL_INTERVAL=3000
 ```
 
 **Generate secure JWT secret:**

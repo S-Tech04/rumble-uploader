@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Rocket, RefreshCw, Trash2, X, ExternalLink, AlertCircle, CheckCircle, CheckSquare, Square, Wifi, WifiOff } from "lucide-react";
+import { fetchWithAuth } from "../lib/fetchWithAuth";
+import ConfirmModal from "./ConfirmModal";
 
 interface Pipeline {
   id: string;
@@ -41,10 +43,21 @@ const PipelineList = ({ token, refreshTrigger }: PipelineListProps) => {
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const reconnectAttemptsRef = useRef(0);
   const maxReconnectAttempts = 5;
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: "",
+    message: "",
+    onConfirm: () => {},
+  });
 
   const fetchPipelines = useCallback(async () => {
     try {
-      const response = await fetch("/api/pipelines", {
+      const response = await fetchWithAuth("/api/pipelines", {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await response.json();
@@ -167,39 +180,51 @@ const PipelineList = ({ token, refreshTrigger }: PipelineListProps) => {
   }, [token, usePolling, connectSSE, startPolling, cleanupEventSource, cleanupPolling]);
 
   const handleClearFailed = async () => {
-    if (!confirm("Clear all failed/cancelled jobs?")) return;
-
-    try {
-      const response = await fetch("/api/clear-failed", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await response.json();
-      if (data.success) {
-        alert(`Cleared ${data.clearedCount} failed/cancelled jobs`);
-        fetchPipelines();
-      }
-    } catch (error) {
-      alert("Network error: " + (error as Error).message);
-    }
+    setConfirmModal({
+      isOpen: true,
+      title: "Clear Failed Jobs",
+      message: "Clear all failed/cancelled jobs?",
+      onConfirm: async () => {
+        setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        try {
+          const response = await fetchWithAuth("/api/clear-failed", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const data = await response.json();
+          if (data.success) {
+            alert(`Cleared ${data.clearedCount} failed/cancelled jobs`);
+            fetchPipelines();
+          }
+        } catch (error) {
+          alert("Network error: " + (error as Error).message);
+        }
+      },
+    });
   };
 
   const handleClearCompleted = async () => {
-    if (!confirm("Clear all completed jobs?")) return;
-
-    try {
-      const response = await fetch("/api/clear-completed", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await response.json();
-      if (data.success) {
-        alert(`Cleared ${data.clearedCount} completed jobs`);
-        fetchPipelines();
-      }
-    } catch (error) {
-      alert("Network error: " + (error as Error).message);
-    }
+    setConfirmModal({
+      isOpen: true,
+      title: "Clear Completed Jobs",
+      message: "Clear all completed jobs?",
+      onConfirm: async () => {
+        setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        try {
+          const response = await fetchWithAuth("/api/clear-completed", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const data = await response.json();
+          if (data.success) {
+            alert(`Cleared ${data.clearedCount} completed jobs`);
+            fetchPipelines();
+          }
+        } catch (error) {
+          alert("Network error: " + (error as Error).message);
+        }
+      },
+    });
   };
 
   const handleDeleteSelected = async () => {
@@ -208,47 +233,59 @@ const PipelineList = ({ token, refreshTrigger }: PipelineListProps) => {
       return;
     }
 
-    if (!confirm(`Delete ${selectedIds.size} selected job(s)?`)) return;
-
-    try {
-      const response = await fetch("/api/delete-selected", {
-        method: "POST",
-        headers: { 
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}` 
-        },
-        body: JSON.stringify({ jobIds: Array.from(selectedIds) }),
-      });
-      const data = await response.json();
-      if (data.success) {
-        alert(`Deleted ${data.deletedCount} job(s)`);
-        setSelectedIds(new Set());
-        fetchPipelines();
-      } else {
-        alert("Error deleting jobs: " + (data.error || "Unknown error"));
-      }
-    } catch (error) {
-      alert("Network error: " + (error as Error).message);
-    }
+    setConfirmModal({
+      isOpen: true,
+      title: "Delete Selected Jobs",
+      message: `Delete ${selectedIds.size} selected job(s)?`,
+      onConfirm: async () => {
+        setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        try {
+          const response = await fetchWithAuth("/api/delete-selected", {
+            method: "POST",
+            headers: { 
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}` 
+            },
+            body: JSON.stringify({ jobIds: Array.from(selectedIds) }),
+          });
+          const data = await response.json();
+          if (data.success) {
+            alert(`Deleted ${data.deletedCount} job(s)`);
+            setSelectedIds(new Set());
+            fetchPipelines();
+          } else {
+            alert("Error deleting jobs: " + (data.error || "Unknown error"));
+          }
+        } catch (error) {
+          alert("Network error: " + (error as Error).message);
+        }
+      },
+    });
   };
 
   const handleDeleteJob = async (jobId: string) => {
-    if (!confirm("Delete this job? This will stop the job if running and clean up all resources (video and subtitle files).")) return;
-
-    try {
-      const response = await fetch(`/api/job/${jobId}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await response.json();
-      if (data.success) {
-        fetchPipelines();
-      } else {
-        alert("Error deleting job: " + (data.error || "Unknown error"));
-      }
-    } catch (error) {
-      alert("Network error: " + (error as Error).message);
-    }
+    setConfirmModal({
+      isOpen: true,
+      title: "Delete Job",
+      message: "Delete this job? This will stop the job if running and clean up all resources (video and subtitle files).",
+      onConfirm: async () => {
+        setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        try {
+          const response = await fetchWithAuth(`/api/job/${jobId}`, {
+            method: "DELETE",
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const data = await response.json();
+          if (data.success) {
+            fetchPipelines();
+          } else {
+            alert("Error deleting job: " + (data.error || "Unknown error"));
+          }
+        } catch (error) {
+          alert("Network error: " + (error as Error).message);
+        }
+      },
+    });
   };
 
   const toggleSelectAll = () => {
@@ -303,7 +340,7 @@ const PipelineList = ({ token, refreshTrigger }: PipelineListProps) => {
           ) : (
             <span className="text-xs text-success bg-success/10 px-2 py-0.5 rounded flex items-center gap-1">
               <Wifi className="w-3 h-3" />
-              Live Stream
+              Live Mode
             </span>
           )}
           {pipelines.length > 0 && (
@@ -322,14 +359,15 @@ const PipelineList = ({ token, refreshTrigger }: PipelineListProps) => {
         </div>
 
         <div className="flex flex-wrap gap-2">
-          <button 
-            onClick={handleDeleteSelected} 
-            disabled={selectedIds.size === 0}
-            className="btn-danger text-xs flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-            Delete Selected {selectedIds.size > 0 && `(${selectedIds.size})`}
-          </button>
+          {selectedIds.size > 0 && (
+            <button 
+              onClick={handleDeleteSelected} 
+              className="btn-danger text-xs flex items-center gap-1.5"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Delete Selected ({selectedIds.size})
+            </button>
+          )}
           <button onClick={handleClearCompleted} className="btn-success text-xs flex items-center gap-1.5">
             <CheckCircle className="w-3.5 h-3.5" />
             Clear Completed
@@ -449,6 +487,13 @@ const PipelineList = ({ token, refreshTrigger }: PipelineListProps) => {
           </div>
         )}
       </div>
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        onConfirm={confirmModal.onConfirm}
+        onCancel={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 };

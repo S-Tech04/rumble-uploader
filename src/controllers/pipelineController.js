@@ -26,7 +26,7 @@ exports.streamAllPipelines = (req, res) => {
 
 exports.startDownload = async (req, res) => {
     try {
-        const { url, title, cookies, linkType, videoType } = req.body;
+        const { url, title, cookies, linkType, videoType, titleFormat } = req.body;
 
         if (!url) {
             return res.status(400).json({ success: false, error: "Missing url" });
@@ -35,7 +35,8 @@ exports.startDownload = async (req, res) => {
         const result = await Pipeline.start(url, cookies || "", {
             title,
             linkType: linkType || "auto",
-            videoType: videoType || "sub"
+            videoType: videoType || "sub",
+            titleFormat: titleFormat || "default"
         });
 
         res.json(result);
@@ -147,7 +148,7 @@ exports.deleteJob = (req, res) => {
 
 exports.startBulkDownload = async (req, res) => {
     try {
-        const { urls, cookies, linkType, videoType, title } = req.body;
+        const { urls, cookies, linkType, videoType, title, titleFormat } = req.body;
 
         if (!urls || !Array.isArray(urls) || urls.length === 0) {
             return res.status(400).json({ success: false, error: "Missing or invalid urls array" });
@@ -160,7 +161,8 @@ exports.startBulkDownload = async (req, res) => {
                 const result = await Pipeline.start(url, cookies || "", {
                     title,
                     linkType: linkType || "anime",
-                    videoType: videoType || "sub"
+                    videoType: videoType || "sub",
+                    titleFormat: titleFormat || "default"
                 });
                 results.push(result);
             } catch (error) {

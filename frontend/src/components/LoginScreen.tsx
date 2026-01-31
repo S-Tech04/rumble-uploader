@@ -63,7 +63,7 @@ const LoginScreen = ({ onLogin }: LoginScreenProps) => {
         </div>
 
         <div className="text-sm text-muted-foreground">
-          © 2024 Anime Video Uploader
+          © 2026 Anime Video Uploader | Made with ❤️ by <strong>Saif Ur Rehman</strong>
         </div>
       </div>
 

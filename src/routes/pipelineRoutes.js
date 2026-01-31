@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const pipelineController = require("../controllers/pipelineController");
+const cleanupController = require("../controllers/cleanupController");
 const authMiddleware = require("../middleware/auth");
 
 router.get("/pipelines", authMiddleware, pipelineController.getAllPipelines);
@@ -21,5 +22,7 @@ router.post("/clear-failed", authMiddleware, pipelineController.clearFailedJobs)
 router.post("/clear-completed", authMiddleware, pipelineController.clearCompletedJobs);
 router.post("/delete-selected", authMiddleware, pipelineController.deleteSelectedJobs);
 router.delete("/job/:jobId", authMiddleware, pipelineController.deleteJob);
+
+router.post("/cleanup-folders", authMiddleware, cleanupController.cleanupFolders);
 
 module.exports = router;
