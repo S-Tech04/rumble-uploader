@@ -9,7 +9,8 @@
     "dev:frontend": "cd frontend && npm run dev",
     "build:frontend": "cd frontend && npm run build",
     "build": "npm run build:frontend",
-    "serve": "npm run build && npm start"
+    "serve": "npm run build && npm start",
+    "postinstall": "cd frontend && npm install"
   },
   "keywords": [
     "9anime",
