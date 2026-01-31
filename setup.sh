@@ -61,6 +61,87 @@ if ! command -v npm &> /dev/null; then
     exit 1
 fi
 
+# Install Chrome/Chromium for Puppeteer
+echo ""
+echo -e "${YELLOW}Installing Chrome/Chromium for web scraping...${NC}"
+if [ -f /etc/debian_version ]; then
+    # Debian/Ubuntu
+    echo -e "${YELLOW}Installing Chrome on Debian/Ubuntu...${NC}"
+    
+    # Install Chrome dependencies
+    sudo apt-get update
+    sudo apt-get install -y wget gnupg ca-certificates
+    
+    # Check if Chrome is already installed
+    if command -v google-chrome-stable &> /dev/null; then
+        echo -e "${GREEN}Google Chrome is already installed${NC}"
+    else
+        # Add Chrome repo
+        wget -qO- https://dl.google.com/linux/linux_signing_key.pub | sudo gpg --dearmor -o /usr/share/keyrings/google-chrome.gpg
+        echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
+        
+        # Install Chrome
+        sudo apt-get update
+        sudo apt-get install -y google-chrome-stable
+        
+        if command -v google-chrome-stable &> /dev/null; then
+            echo -e "${GREEN}Google Chrome installed successfully${NC}"
+        else
+            echo -e "${YELLOW}Chrome installation failed, trying Chromium...${NC}"
+            sudo apt-get install -y chromium-browser || sudo apt-get install -y chromium
+        fi
+    fi
+elif [ -f /etc/redhat-release ]; then
+    # RHEL/CentOS/Fedora
+    echo -e "${YELLOW}Installing Chrome on RHEL/CentOS/Fedora...${NC}"
+    
+    if command -v google-chrome-stable &> /dev/null; then
+        echo -e "${GREEN}Google Chrome is already installed${NC}"
+    else
+        cat <<EOF | sudo tee /etc/yum.repos.d/google-chrome.repo
+[google-chrome]
+name=google-chrome
+baseurl=http://dl.google.com/linux/chrome/rpm/stable/x86_64
+enabled=1
+gpgcheck=1
+gpgkey=https://dl.google.com/linux/linux_signing_key.pub
+EOF
+        sudo yum install -y google-chrome-stable || sudo dnf install -y google-chrome-stable
+        
+        if ! command -v google-chrome-stable &> /dev/null; then
+            echo -e "${YELLOW}Chrome installation failed, trying Chromium...${NC}"
+            sudo yum install -y chromium || sudo dnf install -y chromium
+        fi
+    fi
+else
+    echo -e "${YELLOW}Could not detect OS. Attempting to install Chromium...${NC}"
+    if command -v apt-get &> /dev/null; then
+        sudo apt-get install -y chromium-browser || sudo apt-get install -y chromium
+    elif command -v yum &> /dev/null; then
+        sudo yum install -y chromium || sudo dnf install -y chromium
+    else
+        echo -e "${YELLOW}Could not install Chrome automatically. Please install Chrome or Chromium manually.${NC}"
+    fi
+fi
+
+# Detect Chrome path and store it
+CHROME_PATH=""
+if [ -f "/usr/bin/google-chrome-stable" ]; then
+    CHROME_PATH="/usr/bin/google-chrome-stable"
+elif [ -f "/usr/bin/google-chrome" ]; then
+    CHROME_PATH="/usr/bin/google-chrome"
+elif [ -f "/usr/bin/chromium-browser" ]; then
+    CHROME_PATH="/usr/bin/chromium-browser"
+elif [ -f "/usr/bin/chromium" ]; then
+    CHROME_PATH="/usr/bin/chromium"
+fi
+
+if [ -n "$CHROME_PATH" ]; then
+    echo -e "${GREEN}Chrome found at: $CHROME_PATH${NC}"
+else
+    echo -e "${YELLOW}Warning: Chrome not found. You may need to install it manually.${NC}"
+fi
+
 # Install PM2 globally if not already installed
 echo -e "${YELLOW}Checking PM2 installation...${NC}"
 if ! command -v pm2 &> /dev/null; then
@@ -104,6 +185,7 @@ JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
 AUTH_PASSWORD=${AUTH_PASSWORD}
 API_BASE=${API_BASE}
 RUMBLE_UPLOAD_HOST=${RUMBLE_UPLOAD_HOST}
+CHROME_PATH=${CHROME_PATH}
 EOF
 
 echo -e "${GREEN}.env file created${NC}"

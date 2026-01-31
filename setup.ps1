@@ -79,6 +79,38 @@ try {
     Write-Host "PM2 installed successfully" -ForegroundColor Green
 }
 
+# Check for Chrome installation
+Write-Host ""
+Write-Host "Checking Chrome installation for web scraping..." -ForegroundColor Yellow
+$chromePaths = @(
+    "C:\Program Files\Google\Chrome\Application\chrome.exe",
+    "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+    "$env:LOCALAPPDATA\Google\Chrome\Application\chrome.exe"
+)
+
+$CHROME_PATH = ""
+foreach ($path in $chromePaths) {
+    if (Test-Path $path) {
+        $CHROME_PATH = $path
+        Write-Host "Chrome found at: $CHROME_PATH" -ForegroundColor Green
+        break
+    }
+}
+
+if ([string]::IsNullOrEmpty($CHROME_PATH)) {
+    Write-Host "Chrome not found. Please install Google Chrome for web scraping functionality." -ForegroundColor Yellow
+    Write-Host "Download from: https://www.google.com/chrome/" -ForegroundColor Yellow
+    Write-Host ""
+    $response = Read-Host "Do you want to open the Chrome download page? (Y/N)"
+    if ($response -eq "Y" -or $response -eq "y") {
+        Start-Process "https://www.google.com/chrome/"
+    }
+    Write-Host ""
+    Write-Host "You can continue setup and install Chrome later." -ForegroundColor Yellow
+    Write-Host "After installing Chrome, update CHROME_PATH in .env file." -ForegroundColor Yellow
+    Write-Host ""
+}
+
 # Prompt for configuration
 Write-Host ""
 Write-Host "Configuration Setup" -ForegroundColor Yellow
@@ -118,6 +150,7 @@ JWT_REFRESH_SECRET=$JWT_REFRESH_SECRET
 AUTH_PASSWORD=$AUTH_PASSWORD_PLAIN
 API_BASE=$API_BASE
 RUMBLE_UPLOAD_HOST=$RUMBLE_UPLOAD_HOST
+CHROME_PATH=$CHROME_PATH
 "@
 
 Set-Content -Path ".env" -Value $envContent
