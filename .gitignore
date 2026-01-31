@@ -5,3 +5,10 @@ downloaded/*
 !downloaded/.gitkeep
 temp/*
 !temp/.gitkeep
+
+# Built frontend files - exclude everything in public except static assets
+public/*
+!public/robots.txt
+!public/favicon.ico
+!public/placeholder.svg
+!public/.gitkeep

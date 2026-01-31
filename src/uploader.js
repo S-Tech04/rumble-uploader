@@ -355,7 +355,7 @@ class RumbleUploader {
                 let siteId = null;
                 if (videoSlug) {
                     try {
-                        const ids = await this.getMediaIdFromContentPage(videoSlug);
+                        const ids = await this.getMediaIdFromContentPage(videoSlug, formHeaders);
                         mediaId = ids.mediaId;
                         siteId = ids.siteId;
                         console.log(`[Uploader] Fetched media ID: ${mediaId}, site ID: ${siteId}`);
@@ -409,7 +409,7 @@ class RumbleUploader {
     /**
      * Fetch media ID and site ID from content page
      */
-    async getMediaIdFromContentPage(videoSlug) {
+    async getMediaIdFromContentPage(videoSlug, contentHeaders = null) {
         try {
             const contentPageUrl = 'https://rumble.com/account/content'
 
@@ -449,6 +449,10 @@ class RumbleUploader {
      */
     async uploadSubtitle(mediaId, siteId, subtitlePath, videoTitle) {
         try {
+
+            if (!mediaId || !siteId) {
+                return { success: false, error: "Missing mediaId or siteId" };
+            }
             console.log(`[Uploader] Starting subtitle upload for media ID: ${mediaId}`);
             console.log(`[Uploader] Subtitle file: ${subtitlePath}`);
 

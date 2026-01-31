@@ -140,6 +140,38 @@ class Pipeline {
     }
 
     /**
+     * Clean up job resources (temp files, downloaded files)
+     */
+    static cleanupJobResources(jobId) {
+        try {
+            const job = jobs.get(jobId);
+            if (!job) return;
+
+            console.log(`[Pipeline] Cleaning up resources for job ${jobId}`);
+
+            if (job.videoPath && fs.existsSync(job.videoPath)) {
+                fs.unlinkSync(job.videoPath);
+                console.log(`[Pipeline] Deleted video file: ${job.videoPath}`);
+            }
+
+            if (job.subtitlePath && fs.existsSync(job.subtitlePath)) {
+                fs.unlinkSync(job.subtitlePath);
+                console.log(`[Pipeline] Deleted subtitle file: ${job.subtitlePath}`);
+            }
+
+            const jobTempFiles = fs.readdirSync(TEMP_DIR).filter(file => file.includes(jobId));
+            for (const file of jobTempFiles) {
+                const filePath = path.join(TEMP_DIR, file);
+                fs.unlinkSync(filePath);
+                console.log(`[Pipeline] Deleted temp file: ${filePath}`);
+            }
+
+        } catch (error) {
+            console.error(`[Pipeline] Error cleaning up resources for job ${jobId}:`, error.message);
+        }
+    }
+
+    /**
      * Delete selected jobs by IDs
      */
     static deleteSelectedJobs(jobIds) {
@@ -147,11 +179,13 @@ class Pipeline {
         for (const jobId of jobIds) {
             if (jobs.has(jobId)) {
                 const job = jobs.get(jobId);
-                // Cancel running jobs first
+                
                 if (job.status === "running" || job.status === "paused") {
                     job.status = "cancelled";
                     job.completed = true;
                 }
+                
+                this.cleanupJobResources(jobId);
                 jobs.delete(jobId);
                 deletedCount++;
             }
@@ -165,11 +199,13 @@ class Pipeline {
     static deleteJob(jobId) {
         if (jobs.has(jobId)) {
             const job = jobs.get(jobId);
-            // Cancel running jobs first
+            
             if (job.status === "running" || job.status === "paused") {
                 job.status = "cancelled";
                 job.completed = true;
             }
+            
+            this.cleanupJobResources(jobId);
             jobs.delete(jobId);
             return { success: true, deleted: true };
         }
@@ -497,7 +533,9 @@ class Pipeline {
                 step: "upload",
                 status: "running",
                 message: "Uploading to Rumble...",
-                progress: { percent: 0 }
+                progress: { percent: 0 },
+                videoPath: outputFile,
+                subtitlePath: subtitlePath
             });
 
             const uploader = new RumbleUploader(cookies);
@@ -542,6 +580,12 @@ class Pipeline {
             if (subtitlePath && fs.existsSync(subtitlePath)) {
                 fs.unlinkSync(subtitlePath);
             }
+
+            // Clear paths from job object after deletion
+            this.updateJob(jobId, {
+                videoPath: null,
+                subtitlePath: null
+            });
 
             // Complete
             this.updateJob(jobId, {
